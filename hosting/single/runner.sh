@@ -7,10 +7,9 @@ declare -a DOCKER_VARS=("APP_PORT" "APPS_URL" "ARCHITECTURE" "BUDIBASE_ENVIRONME
 [[ -z "${BUDIBASE_ENVIRONMENT}" ]] && export BUDIBASE_ENVIRONMENT=PRODUCTION
 [[ -z "${CLUSTER_PORT}" ]] && export CLUSTER_PORT=80
 [[ -z "${DEPLOYMENT_ENVIRONMENT}" ]] && export DEPLOYMENT_ENVIRONMENT=docker
-[[ -z "${MINIO_URL}" ]] && export MINIO_URL=http://127.0.0.1:9000
+[[ -z "${MINIO_URL}" ]] && [[ -z "${USE_S3}" ]] && export MINIO_URL=http://127.0.0.1:9000
 [[ -z "${NODE_ENV}" ]] && export NODE_ENV=production
 [[ -z "${POSTHOG_TOKEN}" ]] && export POSTHOG_TOKEN=phc_bIjZL7oh2GEUd2vqvTBH8WvrX0fWTFQMs6H5KQxiUxU
-[[ -z "${TENANT_FEATURE_FLAGS}" ]] && export TENANT_FEATURE_FLAGS="*:LICENSING,*:USER_GROUPS,*:ONBOARDING_TOUR"
 [[ -z "${ACCOUNT_PORTAL_URL}" ]] && export ACCOUNT_PORTAL_URL=https://account.budibase.app
 [[ -z "${REDIS_URL}" ]] && export REDIS_URL=127.0.0.1:6379
 [[ -z "${SELF_HOSTED}" ]] && export SELF_HOSTED=1
@@ -22,11 +21,11 @@ declare -a DOCKER_VARS=("APP_PORT" "APPS_URL" "ARCHITECTURE" "BUDIBASE_ENVIRONME
 
 # Azure App Service customisations
 if [[ "${TARGETBUILD}" = "aas" ]]; then
-    DATA_DIR="${DATA_DIR:-/home}"
+    export DATA_DIR="${DATA_DIR:-/home}"
     WEBSITES_ENABLE_APP_SERVICE_STORAGE=true
     /etc/init.d/ssh start
 else
-    DATA_DIR=${DATA_DIR:-/data}
+    export DATA_DIR=${DATA_DIR:-/data}
 fi
 mkdir -p ${DATA_DIR}
 # Mount NFS or GCP Filestore if env vars exist for it
@@ -45,14 +44,18 @@ fi
 # randomise any unset environment variables
 for ENV_VAR in "${ENV_VARS[@]}"
 do
-    temp=$(eval "echo \$$ENV_VAR")
-    if [[ -z "${temp}" ]]; then
+    if [[ -z "${!ENV_VAR}" ]]; then
         eval "export $ENV_VAR=$(uuidgen | sed -e 's/-//g')"
     fi
 done
 if [[ -z "${COUCH_DB_URL}" ]]; then
     export COUCH_DB_URL=http://$COUCHDB_USER:$COUCHDB_PASSWORD@127.0.0.1:5984
 fi
+
+if [[ -z "${COUCH_DB_SQL_URL}" ]]; then
+    export COUCH_DB_SQL_URL=http://127.0.0.1:4984
+fi
+
 if [ ! -f "${DATA_DIR}/.env" ]; then
     touch ${DATA_DIR}/.env
     for ENV_VAR in "${ENV_VARS[@]}"
@@ -72,12 +75,31 @@ fi
 for LINE in $(cat ${DATA_DIR}/.env); do export $LINE; done
 ln -s ${DATA_DIR}/.env /app/.env
 ln -s ${DATA_DIR}/.env /worker/.env
+
 # make these directories in runner, incase of mount
 mkdir -p ${DATA_DIR}/minio
+mkdir -p ${DATA_DIR}/redis
 chown -R couchdb:couchdb ${DATA_DIR}/couch
-redis-server --requirepass $REDIS_PASSWORD > /dev/stdout 2>&1 &
+
+REDIS_CONFIG="/etc/redis/redis.conf"
+sed -i "s#DATA_DIR#${DATA_DIR}#g" "${REDIS_CONFIG}"
+
+if [[ -n "${USE_DEFAULT_REDIS_CONFIG}" ]]; then
+  REDIS_CONFIG=""
+fi
+
+if [[ -n "${REDIS_PASSWORD}" ]]; then
+  redis-server "${REDIS_CONFIG}" --requirepass $REDIS_PASSWORD > /dev/stdout 2>&1 &
+else
+  redis-server "${REDIS_CONFIG}" > /dev/stdout 2>&1 &
+fi
 /bbcouch-runner.sh &
-/minio/minio server --console-address ":9001" ${DATA_DIR}/minio > /dev/stdout 2>&1 &
+
+# only start minio if use s3 isn't passed
+if [[ -z "${USE_S3}" ]]; then
+  /minio/minio server --console-address ":9001" ${DATA_DIR}/minio > /dev/stdout 2>&1 &
+fi
+
 /etc/init.d/nginx restart
 if [[ ! -z "${CUSTOM_DOMAIN}" ]]; then
     # Add monthly cron job to renew certbot certificate
@@ -92,10 +114,12 @@ fi
 sleep 10
 
 pushd app
-pm2 start -l /dev/stdout --name app "yarn run:docker"
+pm2 start --name app "yarn run:docker"
 popd
 pushd worker
-pm2 start -l /dev/stdout --name worker "yarn run:docker"
+pm2 start --name worker "yarn run:docker"
 popd
 echo "end of runner.sh, sleeping ..."
+
+tail -f $HOME/.pm2/logs/*.log
 sleep infinity

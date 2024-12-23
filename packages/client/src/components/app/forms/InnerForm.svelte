@@ -10,9 +10,13 @@
   export let initialValues
   export let size
   export let schema
-  export let table
-  export let disableValidation = false
+  export let definition
+  export let disableSchemaValidation = false
   export let editAutoColumns = false
+
+  // For internal use only, to disable context when being used with standalone
+  // fields
+  export let provideContext = true
 
   // We export this store so that when we remount the inner form we can still
   // persist what step we're on
@@ -156,17 +160,16 @@
       if (!field) {
         return
       }
-
       // Create validation function based on field schema
-      const schemaConstraints = schema?.[field]?.constraints
-      const validator = disableValidation
+      const schemaConstraints = disableSchemaValidation
         ? null
-        : createValidatorFromConstraints(
-            schemaConstraints,
-            validationRules,
-            field,
-            table
-          )
+        : schema?.[field]?.constraints
+      const validator = createValidatorFromConstraints(
+        schemaConstraints,
+        validationRules,
+        field,
+        definition
+      )
 
       // Sanitise the default value to ensure it doesn't contain invalid data
       defaultValue = sanitiseValue(defaultValue, schema?.[field], type)
@@ -207,7 +210,7 @@
           error: initialError,
           disabled:
             disabled || fieldDisabled || (isAutoColumn && !editAutoColumns),
-          readonly: readonly || fieldReadOnly,
+          readonly: readonly || fieldReadOnly || schema?.[field]?.readonly,
           defaultValue,
           validator,
           lastUpdate: Date.now(),
@@ -332,15 +335,15 @@
       const { value, error } = fieldState
 
       // Create new validator
-      const schemaConstraints = schema?.[field]?.constraints
-      const validator = disableValidation
+      const schemaConstraints = disableSchemaValidation
         ? null
-        : createValidatorFromConstraints(
-            schemaConstraints,
-            validationRules,
-            field,
-            table
-          )
+        : schema?.[field]?.constraints
+      const validator = createValidatorFromConstraints(
+        schemaConstraints,
+        validationRules,
+        field,
+        definition
+      )
 
       // Update validator
       fieldInfo.update(state => {
@@ -423,10 +426,14 @@
     }
     const fieldId = field.fieldState.fieldId
     const fieldElement = document.getElementById(fieldId)
-    fieldElement.focus({ preventScroll: true })
+    if (fieldElement) {
+      fieldElement.focus({ preventScroll: true })
+    }
     const label = document.querySelector(`label[for="${fieldId}"]`)
-    label.style.scrollMargin = "100px"
-    label.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    if (label) {
+      label.style.scrollMargin = "100px"
+      label.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    }
   }
 
   // Action context to pass to children
@@ -439,8 +446,14 @@
   ]
 </script>
 
-<Provider {actions} data={dataContext}>
+{#if provideContext}
+  <Provider {actions} data={dataContext}>
+    <div use:styleable={$component.styles} class={size}>
+      <slot />
+    </div>
+  </Provider>
+{:else}
   <div use:styleable={$component.styles} class={size}>
     <slot />
   </div>
-</Provider>
+{/if}

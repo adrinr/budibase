@@ -19,7 +19,6 @@
     auth,
     licensing,
     organisation,
-    features,
     admin,
   } from "stores/portal"
   import { onMount } from "svelte"
@@ -28,6 +27,7 @@
   import GroupsTableRenderer from "./_components/GroupsTableRenderer.svelte"
   import AppsTableRenderer from "./_components/AppsTableRenderer.svelte"
   import RoleTableRenderer from "./_components/RoleTableRenderer.svelte"
+  import EmailTableRenderer from "./_components/EmailTableRenderer.svelte"
   import { goto } from "@roxi/routify"
   import OnboardingTypeModal from "./_components/OnboardingTypeModal.svelte"
   import PasswordModal from "./_components/PasswordModal.svelte"
@@ -36,8 +36,7 @@
   import { get } from "svelte/store"
   import { Constants, Utils, fetchData } from "@budibase/frontend-core"
   import { API } from "api"
-  import { OnboardingType } from "../../../../../constants"
-  import ScimBanner from "../_components/SCIMBanner.svelte"
+  import { OnboardingType } from "constants"
   import { sdk } from "@budibase/shared-core"
 
   const fetch = fetchData({
@@ -53,6 +52,7 @@
 
   let groupsLoaded = !$licensing.groupsEnabled || $groups?.length
   let enrichedUsers = []
+  let tenantOwner
   let createUserModal,
     inviteConfirmationModal,
     onboardingTypeModal,
@@ -61,8 +61,10 @@
     userLimitReachedModal
   let searchEmail = undefined
   let selectedRows = []
+  let selectedInvites = []
   let bulkSaveResponse
   let customRenderers = [
+    { column: "email", component: EmailTableRenderer },
     { column: "userGroups", component: GroupsTableRenderer },
     { column: "apps", component: AppsTableRenderer },
     { column: "role", component: RoleTableRenderer },
@@ -73,7 +75,7 @@
   let parsedInvites = []
 
   $: isOwner = $auth.accountPortalAccess && $admin.cloud
-  $: readonly = !sdk.users.isAdmin($auth.user) || $features.isScimEnabled
+  $: readonly = !sdk.users.isAdmin($auth.user)
   $: debouncedUpdateFetch(searchEmail)
   $: schema = {
     email: {
@@ -82,6 +84,7 @@
       minWidth: "200px",
     },
     role: {
+      displayName: "Access",
       sortable: false,
       width: "1fr",
     },
@@ -96,8 +99,10 @@
   $: pendingSchema = getPendingSchema(schema)
   $: userData = []
   $: inviteUsersResponse = { successful: [], unsuccessful: [] }
-  $: {
-    enrichedUsers = $fetch.rows?.map(user => {
+  $: setEnrichedUsers($fetch.rows, tenantOwner)
+
+  const setEnrichedUsers = async (rows, owner) => {
+    enrichedUsers = rows?.map(user => {
       let userGroups = []
       $groups.forEach(group => {
         if (group.users) {
@@ -108,21 +113,32 @@
           })
         }
       })
+      if (owner) {
+        user.tenantOwnerEmail = owner.email
+      }
+      const role = Constants.ExtendedBudibaseRoleOptions.find(
+        x => x.value === users.getUserRole(user)
+      )
       return {
         ...user,
         name: user.firstName ? user.firstName + " " + user.lastName : "",
         userGroups,
+        __selectable:
+          role.value === Constants.BudibaseRoles.Owner ||
+          $auth.user?.email === user.email
+            ? false
+            : true,
         apps: [...new Set(Object.keys(user.roles))],
+        access: role.sortOrder,
       }
     })
   }
-
   const getPendingSchema = tblSchema => {
     if (!tblSchema) {
       return {}
     }
     let pendingSchema = JSON.parse(JSON.stringify(tblSchema))
-    pendingSchema.email.displayName = "Pending Invites"
+    pendingSchema.email.displayName = "Pending Users"
     return pendingSchema
   }
 
@@ -131,6 +147,7 @@
       const { admin, builder, userGroups, apps } = invite.info
 
       return {
+        _id: invite.code,
         email: invite.email,
         builder,
         admin,
@@ -171,6 +188,7 @@
     const payload = userData?.users?.map(user => ({
       email: user.email,
       builder: user.role === Constants.BudibaseRoles.Developer,
+      creator: user.role === Constants.BudibaseRoles.Creator,
       admin: user.role === Constants.BudibaseRoles.Admin,
       groups: userData.groups,
     }))
@@ -189,18 +207,18 @@
 
     for (const user of userData?.users ?? []) {
       const { email } = user
-
       if (
         newUsers.find(x => x.email === email) ||
         currentUserEmails.includes(email)
-      )
+      ) {
         continue
-
+      }
       newUsers.push(user)
     }
 
-    if (!newUsers.length)
+    if (!newUsers.length) {
       notifications.info("Duplicated! There is no new users to add.")
+    }
     return { ...userData, users: newUsers }
   }
 
@@ -212,7 +230,7 @@
       const newUser = {
         email: email,
         role: usersRole,
-        password: Math.random().toString(36).substring(2, 22),
+        password: generatePassword(12),
         forceResetPassword: true,
       }
 
@@ -245,31 +263,77 @@
     }
   }
 
-  const deleteRows = async () => {
+  const deleteUsers = async () => {
     try {
       let ids = selectedRows.map(user => user._id)
       if (ids.includes(get(auth).user._id)) {
         notifications.error("You cannot delete yourself")
         return
       }
-      await users.bulkDelete(ids)
-      notifications.success(`Successfully deleted ${selectedRows.length} rows`)
+
+      if (selectedRows.some(u => u.scimInfo?.isSync)) {
+        notifications.error("You cannot remove users created via your AD")
+        return
+      }
+
+      if (ids.length > 0) {
+        await users.bulkDelete(
+          selectedRows.map(user => ({
+            userId: user._id,
+            email: user.email,
+          }))
+        )
+      }
+
+      if (selectedInvites.length > 0) {
+        await users.removeInvites(
+          selectedInvites.map(invite => ({
+            code: invite._id,
+          }))
+        )
+        pendingInvites = await users.getInvites()
+      }
+
+      notifications.success(
+        `Successfully deleted ${
+          selectedRows.length + selectedInvites.length
+        } users`
+      )
       selectedRows = []
+      selectedInvites = []
       await fetch.refresh()
     } catch (error) {
-      notifications.error("Error deleting rows")
+      notifications.error("Error deleting users")
     }
+  }
+
+  const generatePassword = length => {
+    const array = new Uint8Array(length)
+    window.crypto.getRandomValues(array)
+    return Array.from(array, byte => byte.toString(36).padStart(2, "0"))
+      .join("")
+      .slice(0, length)
   }
 
   onMount(async () => {
     try {
       await groups.actions.init()
       groupsLoaded = true
-
-      pendingInvites = await users.getInvites()
-      invitesLoaded = true
     } catch (error) {
       notifications.error("Error fetching user group data")
+    }
+    try {
+      pendingInvites = await users.getInvites()
+      invitesLoaded = true
+    } catch (err) {
+      notifications.error("Error fetching user invitations")
+    }
+    try {
+      tenantOwner = await users.getAccountHolder()
+    } catch (err) {
+      if (err.status !== 404) {
+        notifications.error("Error fetching account holder")
+      }
     }
   })
 </script>
@@ -319,19 +383,17 @@
           Import
         </Button>
       </div>
-    {:else}
-      <ScimBanner />
     {/if}
     <div class="controls-right">
-      <Search bind:value={searchEmail} placeholder="Search" />
-      {#if selectedRows.length > 0}
+      {#if selectedRows.length > 0 || selectedInvites.length > 0}
         <DeleteRowsButton
           item="user"
           on:updaterows
-          {selectedRows}
-          {deleteRows}
+          selectedRows={[...selectedRows, ...selectedInvites]}
+          deleteRows={deleteUsers}
         />
       {/if}
+      <Search bind:value={searchEmail} placeholder="Search" />
     </div>
   </div>
   <Table
@@ -344,7 +406,9 @@
     allowSelectRows={!readonly}
     {customRenderers}
     loading={!$fetch.loaded || !groupsLoaded}
+    defaultSortColumn={"access"}
   />
+
   <div class="pagination">
     <Pagination
       page={$fetch.pageNumber + 1}
@@ -354,11 +418,14 @@
       goToNextPage={fetch.nextPage}
     />
   </div>
+
   <Table
+    bind:selectedRows={selectedInvites}
     schema={pendingSchema}
     data={parsedInvites}
     allowEditColumns={false}
     allowEditRows={false}
+    allowSelectRows={!readonly}
     {customRenderers}
     loading={!invitesLoaded}
     allowClickRows={false}
@@ -401,6 +468,7 @@
     display: flex;
     flex-direction: row;
     justify-content: flex-end;
+    margin-left: auto;
   }
   .controls {
     display: flex;

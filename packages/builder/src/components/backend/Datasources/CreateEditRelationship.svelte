@@ -1,5 +1,8 @@
 <script>
-  import { RelationshipType } from "constants/backend"
+  import {
+    RelationshipType,
+    PrettyRelationshipDefinitions,
+  } from "constants/backend"
   import {
     keepOpen,
     Button,
@@ -8,13 +11,12 @@
     Select,
     Detail,
     Body,
+    Helpers,
   } from "@budibase/bbui"
-  import { tables } from "stores/backend"
-  import { Helpers } from "@budibase/bbui"
+  import { tables } from "stores/builder"
   import { RelationshipErrorChecker } from "./relationshipErrors"
   import { onMount } from "svelte"
   import RelationshipSelector from "components/common/RelationshipSelector.svelte"
-  import { PrettyRelationshipDefinitions } from "constants/backend"
 
   export let save
   export let datasource
@@ -38,8 +40,15 @@
       part2: PrettyRelationshipDefinitions.MANY,
     },
   }
-  let relationshipOpts1 = Object.values(PrettyRelationshipDefinitions)
-  let relationshipOpts2 = Object.values(PrettyRelationshipDefinitions)
+  $: relationshipOpts1 =
+    relationshipPart2 === PrettyRelationshipDefinitions.ONE
+      ? [PrettyRelationshipDefinitions.MANY]
+      : Object.values(PrettyRelationshipDefinitions)
+
+  $: relationshipOpts2 =
+    relationshipPart1 === PrettyRelationshipDefinitions.ONE
+      ? [PrettyRelationshipDefinitions.MANY]
+      : Object.values(PrettyRelationshipDefinitions)
 
   let relationshipPart1 = PrettyRelationshipDefinitions.ONE
   let relationshipPart2 = PrettyRelationshipDefinitions.MANY
@@ -56,7 +65,7 @@
   let tableOptions
   let errorChecker = new RelationshipErrorChecker(
     invalidThroughTable,
-    relationshipExists
+    manyToManyRelationshipExistsFn
   )
   let errors = {}
   let fromPrimary, fromForeign, fromColumn, toColumn
@@ -86,8 +95,12 @@
       hasValidated = false
     })
   }
+
   $: valid =
-    getErrorCount(errors) === 0 && allRequiredAttributesSet(relationshipType)
+    getErrorCount(errors) === 0 &&
+    allRequiredAttributesSet(relationshipType) &&
+    fromId &&
+    toId
   $: isManyToMany = relationshipType === RelationshipType.MANY_TO_MANY
   $: isManyToOne =
     relationshipType === RelationshipType.MANY_TO_ONE ||
@@ -112,7 +125,7 @@
     }
     return false
   }
-  function relationshipExists() {
+  function manyToManyRelationshipExistsFn() {
     if (
       originalFromTable &&
       originalToTable &&
@@ -128,16 +141,14 @@
       datasource.entities[getTable(toId).name].schema
     ).filter(value => value.through)
 
-    const matchAgainstUserInput = (fromTableId, toTableId) =>
-      (fromTableId === fromId && toTableId === toId) ||
-      (fromTableId === toId && toTableId === fromId)
+    const matchAgainstUserInput = link =>
+      (link.throughTo === throughToKey &&
+        link.throughFrom === throughFromKey) ||
+      (link.throughTo === throughFromKey && link.throughFrom === throughToKey)
 
-    return !!fromThroughLinks.find(from =>
-      toThroughLinks.find(
-        to =>
-          from.through === to.through &&
-          matchAgainstUserInput(from.tableId, to.tableId)
-      )
+    const allLinks = [...fromThroughLinks, ...toThroughLinks]
+    return !!allLinks.find(
+      link => link.through === throughId && matchAgainstUserInput(link)
     )
   }
 
@@ -168,16 +179,15 @@
       relationshipType: errorChecker.relationshipTypeSet(relationshipType),
       fromTable:
         errorChecker.tableSet(fromTable) ||
-        errorChecker.doesRelationshipExists() ||
         errorChecker.differentTables(fromId, toId, throughId),
       toTable:
         errorChecker.tableSet(toTable) ||
-        errorChecker.doesRelationshipExists() ||
         errorChecker.differentTables(toId, fromId, throughId),
       throughTable:
         errorChecker.throughTableSet(throughTable) ||
         errorChecker.throughIsNullable() ||
-        errorChecker.differentTables(throughId, fromId, toId),
+        errorChecker.differentTables(throughId, fromId, toId) ||
+        errorChecker.doesRelationshipExists(),
       throughFromKey:
         errorChecker.manyForeignKeySet(throughFromKey) ||
         errorChecker.manyTypeMismatch(
@@ -185,7 +195,8 @@
           throughTable,
           fromTable.primary[0],
           throughToKey
-        ),
+        ) ||
+        errorChecker.differentColumns(throughFromKey, throughToKey),
       throughToKey:
         errorChecker.manyForeignKeySet(throughToKey) ||
         errorChecker.manyTypeMismatch(
@@ -359,6 +370,16 @@
       fromColumn = selectedFromTable.name
       fromPrimary = selectedFromTable?.primary[0] || null
     }
+    if (relationshipType === RelationshipType.MANY_TO_MANY) {
+      relationshipPart1 = PrettyRelationshipDefinitions.MANY
+      relationshipPart2 = PrettyRelationshipDefinitions.MANY
+    } else if (relationshipType === RelationshipType.MANY_TO_ONE) {
+      relationshipPart1 = PrettyRelationshipDefinitions.ONE
+      relationshipPart2 = PrettyRelationshipDefinitions.MANY
+    } else {
+      relationshipPart1 = PrettyRelationshipDefinitions.MANY
+      relationshipPart2 = PrettyRelationshipDefinitions.ONE
+    }
   })
 </script>
 
@@ -367,6 +388,7 @@
   confirmText="Save"
   onConfirm={saveRelationship}
   disabled={!valid}
+  size="L"
 >
   <div class="headings">
     <Detail>Tables</Detail>

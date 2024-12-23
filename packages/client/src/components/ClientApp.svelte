@@ -2,11 +2,13 @@
   import { writable, get } from "svelte/store"
   import { setContext, onMount } from "svelte"
   import { Layout, Heading, Body } from "@budibase/bbui"
-  import ErrorSVG from "@budibase/frontend-core/assets/error.svg"
+  import ErrorSVG from "@budibase/frontend-core/assets/error.svg?raw"
   import { Constants, CookieUtils } from "@budibase/frontend-core"
+  import { getThemeClassNames } from "@budibase/shared-core"
   import Component from "./Component.svelte"
   import SDK from "sdk"
   import {
+    featuresStore,
     createContextStore,
     initialise,
     screenStore,
@@ -17,6 +19,9 @@
     appStore,
     devToolsStore,
     devToolsEnabled,
+    environmentStore,
+    sidePanelStore,
+    modalStore,
   } from "stores"
   import NotificationDisplay from "components/overlay/NotificationDisplay.svelte"
   import ConfirmationDisplay from "components/overlay/ConfirmationDisplay.svelte"
@@ -36,7 +41,9 @@
   import DevToolsHeader from "components/devtools/DevToolsHeader.svelte"
   import DevTools from "components/devtools/DevTools.svelte"
   import FreeFooter from "components/FreeFooter.svelte"
-  import licensing from "../licensing"
+  import MaintenanceScreen from "components/MaintenanceScreen.svelte"
+  import SnippetsProvider from "./context/SnippetsProvider.svelte"
+  import EmbedProvider from "./context/EmbedProvider.svelte"
 
   // Provide contexts
   setContext("sdk", SDK)
@@ -80,11 +87,18 @@
     }
   }
 
+  let fontsLoaded = false
+
   // Load app config
   onMount(async () => {
+    document.fonts.ready.then(() => {
+      fontsLoaded = true
+    })
+
     await initialise()
     await authStore.actions.fetchUser()
     dataLoaded = true
+
     if (get(builderStore).inBuilder) {
       builderStore.actions.notifyLoaded()
     } else {
@@ -92,7 +106,40 @@
         embedded: !!$appStore.embedded,
       })
     }
+    const handleHashChange = () => {
+      const { open: sidePanelOpen } = $sidePanelStore
+      // only close if the sidepanel is open and theres no onload side panel actions on the screen.
+      if (
+        sidePanelOpen &&
+        !$screenStore.activeScreen.onLoad?.some(
+          item => item["##eventHandlerType"] === "Open Side Panel"
+        )
+      ) {
+        sidePanelStore.actions.close()
+      }
+
+      const { open: modalOpen } = $modalStore
+      // only close if the modal is open and theres onload modals actions on the screen.
+      if (
+        modalOpen &&
+        !$screenStore.activeScreen.onLoad?.some(
+          item => item["##eventHandlerType"] === "Open Modal"
+        )
+      ) {
+        modalStore.actions.close()
+      }
+    }
+    window.addEventListener("hashchange", handleHashChange)
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange)
+    }
   })
+
+  $: {
+    if (dataLoaded && fontsLoaded) {
+      document.getElementById("clientAppSkeletonLoader")?.remove()
+    }
+  }
 </script>
 
 <svelte:head>
@@ -108,135 +155,138 @@
     id="spectrum-root"
     lang="en"
     dir="ltr"
-    class="spectrum spectrum--medium {$themeStore.baseTheme} {$themeStore.theme}"
+    class="spectrum spectrum--medium {getThemeClassNames($themeStore.theme)}"
     class:builder={$builderStore.inBuilder}
+    class:show={fontsLoaded && dataLoaded}
   >
-    <DeviceBindingsProvider>
-      <UserBindingsProvider>
-        <StateBindingsProvider>
-          <RowSelectionProvider>
-            <QueryParamsProvider>
-              <!-- Settings bar can be rendered outside of device preview -->
-              <!-- Key block needs to be outside the if statement or it breaks -->
-              {#key $builderStore.selectedComponentId}
-                {#if $builderStore.inBuilder}
-                  <SettingsBar />
-                {/if}
-              {/key}
+    {#if $environmentStore.maintenance.length > 0}
+      <MaintenanceScreen maintenanceList={$environmentStore.maintenance} />
+    {:else}
+      <EmbedProvider>
+        <DeviceBindingsProvider>
+          <UserBindingsProvider>
+            <StateBindingsProvider>
+              <RowSelectionProvider>
+                <QueryParamsProvider>
+                  <SnippetsProvider>
+                    <!-- Settings bar can be rendered outside of device preview -->
+                    <!-- Key block needs to be outside the if statement or it breaks -->
+                    {#key $builderStore.selectedComponentId}
+                      {#if $builderStore.inBuilder}
+                        <SettingsBar />
+                      {/if}
+                    {/key}
 
-              <!-- Clip boundary for selection indicators -->
-              <div
-                id="clip-root"
-                class:preview={$builderStore.inBuilder}
-                class:tablet-preview={$builderStore.previewDevice === "tablet"}
-                class:mobile-preview={$builderStore.previewDevice === "mobile"}
-              >
-                <!-- Actual app -->
-                <div id="app-root">
-                  {#if showDevTools}
-                    <DevToolsHeader />
-                  {/if}
+                    <!-- Clip boundary for selection indicators -->
+                    <div
+                      id="clip-root"
+                      class:preview={$builderStore.inBuilder}
+                      class:tablet-preview={$builderStore.previewDevice ===
+                        "tablet"}
+                      class:mobile-preview={$builderStore.previewDevice ===
+                        "mobile"}
+                    >
+                      <!-- Actual app -->
+                      <div id="app-root">
+                        {#if showDevTools}
+                          <DevToolsHeader />
+                        {/if}
 
-                  <div id="app-body">
-                    {#if permissionError}
-                      <div class="error">
-                        <Layout justifyItems="center" gap="S">
-                          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                          {@html ErrorSVG}
-                          <Heading size="L">
-                            You don't have permission to use this app
-                          </Heading>
-                          <Body size="S">
-                            Ask your administrator to grant you access
-                          </Body>
-                        </Layout>
+                        <div id="app-body">
+                          {#if permissionError}
+                            <div class="error">
+                              <Layout justifyItems="center" gap="S">
+                                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                                {@html ErrorSVG}
+                                <Heading size="L">
+                                  You don't have permission to use this app
+                                </Heading>
+                                <Body size="S">
+                                  Ask your administrator to grant you access
+                                </Body>
+                              </Layout>
+                            </div>
+                          {:else if !$screenStore.activeLayout}
+                            <div class="error">
+                              <Layout justifyItems="center" gap="S">
+                                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                                {@html ErrorSVG}
+                                <Heading size="L">
+                                  Something went wrong rendering your app
+                                </Heading>
+                                <Body size="S">
+                                  Get in touch with support if this issue
+                                  persists
+                                </Body>
+                              </Layout>
+                            </div>
+                          {:else if embedNoScreens}
+                            <div class="error">
+                              <Layout justifyItems="center" gap="S">
+                                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                                {@html ErrorSVG}
+                                <Heading size="L">
+                                  This Budibase app is not publicly accessible
+                                </Heading>
+                              </Layout>
+                            </div>
+                          {:else}
+                            <CustomThemeWrapper>
+                              {#key $screenStore.activeLayout._id}
+                                <Component
+                                  isLayout
+                                  instance={$screenStore.activeLayout.props}
+                                />
+                              {/key}
+
+                              <!-- Layers on top of app -->
+                              <NotificationDisplay />
+                              <ConfirmationDisplay />
+                              <PeekScreenDisplay />
+                            </CustomThemeWrapper>
+                          {/if}
+
+                          {#if showDevTools}
+                            <DevTools />
+                          {/if}
+                        </div>
+
+                        {#if !$builderStore.inBuilder && $featuresStore.logoEnabled}
+                          <FreeFooter />
+                        {/if}
                       </div>
-                    {:else if !$screenStore.activeLayout}
-                      <div class="error">
-                        <Layout justifyItems="center" gap="S">
-                          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                          {@html ErrorSVG}
-                          <Heading size="L">
-                            Something went wrong rendering your app
-                          </Heading>
-                          <Body size="S">
-                            Get in touch with support if this issue persists
-                          </Body>
-                        </Layout>
-                      </div>
-                    {:else if embedNoScreens}
-                      <div class="error">
-                        <Layout justifyItems="center" gap="S">
-                          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                          {@html ErrorSVG}
-                          <Heading size="L">
-                            This Budibase app is not publicly accessible
-                          </Heading>
-                        </Layout>
-                      </div>
-                    {:else}
-                      <CustomThemeWrapper>
-                        {#key $screenStore.activeLayout._id}
-                          <Component
-                            isLayout
-                            instance={$screenStore.activeLayout.props}
-                          />
-                        {/key}
 
-                        <!--
-                          Flatpickr needs to be inside the theme wrapper.
-                          It also needs its own container because otherwise it hijacks
-                          key events on the whole page. It is painful to work with.
-                        -->
-                        <div id="flatpickr-root" />
-
-                        <!-- Modal container to ensure they sit on top -->
-                        <div class="modal-container" />
-
-                        <!-- Layers on top of app -->
-                        <NotificationDisplay />
-                        <ConfirmationDisplay />
-                        <PeekScreenDisplay />
-                      </CustomThemeWrapper>
-                    {/if}
-
-                    {#if showDevTools}
-                      <DevTools />
-                    {/if}
-                  </div>
-
-                  {#if !$builderStore.inBuilder && licensing.logoEnabled()}
-                    <FreeFooter />
-                  {/if}
-                </div>
-
-                <!-- Preview and dev tools utilities  -->
-                {#if $appStore.isDevApp}
-                  <SelectionIndicator />
-                {/if}
-                {#if $builderStore.inBuilder || $devToolsStore.allowSelection}
-                  <HoverIndicator />
-                {/if}
-                {#if $builderStore.inBuilder}
-                  <DNDHandler />
-                  <GridDNDHandler />
-                {/if}
-              </div>
-            </QueryParamsProvider>
-          </RowSelectionProvider>
-        </StateBindingsProvider>
-      </UserBindingsProvider>
-    </DeviceBindingsProvider>
+                      <!-- Preview and dev tools utilities  -->
+                      {#if $appStore.isDevApp}
+                        <SelectionIndicator />
+                      {/if}
+                      {#if $builderStore.inBuilder || $devToolsStore.allowSelection}
+                        <HoverIndicator />
+                      {/if}
+                      {#if $builderStore.inBuilder}
+                        <DNDHandler />
+                        <GridDNDHandler />
+                      {/if}
+                    </div>
+                  </SnippetsProvider>
+                </QueryParamsProvider>
+              </RowSelectionProvider>
+            </StateBindingsProvider>
+          </UserBindingsProvider>
+        </DeviceBindingsProvider>
+      </EmbedProvider>
+    {/if}
   </div>
   <KeyboardManager />
 {/if}
 
 <style>
   #spectrum-root {
+    height: 0;
+    visibility: hidden;
     padding: 0;
     margin: 0;
-    overflow: hidden;
-    height: 100%;
+    overflow: clip;
     width: 100%;
     display: flex;
     flex-direction: row;
@@ -253,12 +303,17 @@
     width: 100%;
     height: 100%;
     position: relative;
-    overflow: hidden;
+    overflow: clip;
     background-color: transparent;
   }
 
+  #spectrum-root.show {
+    height: 100%;
+    visibility: visible;
+  }
+
   #app-root {
-    overflow: hidden;
+    overflow: clip;
     height: 100%;
     width: 100%;
     display: flex;
@@ -274,6 +329,7 @@
     justify-content: flex-start;
     align-items: stretch;
     overflow: hidden;
+    position: relative;
   }
 
   .error {
@@ -303,22 +359,16 @@
   }
 
   /* Preview styles */
-  /* The additional 6px of size is to account for 4px padding and 2px border */
   #clip-root.preview {
-    padding: 2px;
+    padding: 6px;
   }
   #clip-root.tablet-preview {
-    width: calc(1024px + 6px);
-    height: calc(768px + 6px);
+    width: calc(1024px + 12px);
+    height: calc(768px + 12px);
   }
   #clip-root.mobile-preview {
-    width: calc(390px + 6px);
-    height: calc(844px + 6px);
-  }
-
-  .preview #app-root {
-    border: 1px solid var(--spectrum-global-color-gray-300);
-    border-radius: 4px;
+    width: calc(390px + 12px);
+    height: calc(844px + 12px);
   }
 
   /* Print styles */

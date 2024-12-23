@@ -1,6 +1,6 @@
 <script>
   import { createEventDispatcher } from "svelte"
-  import { queries } from "stores/backend"
+  import { queries } from "stores/builder"
   import { Select, Label } from "@budibase/bbui"
   import DrawerBindableInput from "../../common/bindings/DrawerBindableInput.svelte"
   import AutomationBindingPanel from "../../common/bindings/ServerBindingPanel.svelte"
@@ -52,7 +52,6 @@
           on:change={e => onChange(e, field)}
           type="string"
           {bindings}
-          fillWidth={true}
           updateOnChange={false}
         />
       </div>

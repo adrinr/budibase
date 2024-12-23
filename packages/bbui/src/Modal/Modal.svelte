@@ -10,6 +10,7 @@
   export let inline = false
   export let disableCancel = false
   export let autoFocus = true
+  export let zIndex = 1001
 
   const dispatch = createEventDispatcher()
   let visible = fixed || inline
@@ -100,7 +101,12 @@
   -->
   <Portal target=".modal-container">
     {#if visible}
-      <div class="spectrum-Underlay is-open" on:mousedown|self={cancel}>
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div
+        class="spectrum-Underlay is-open"
+        on:mousedown|self={cancel}
+        style="z-index:{zIndex || 999}"
+      >
         <div
           class="background"
           in:fade={{ duration: 200 }}
@@ -131,7 +137,6 @@
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    z-index: 999;
     overflow: auto;
     overflow-x: hidden;
     background: transparent;
@@ -157,6 +162,7 @@
     max-height: 100%;
   }
   .modal-inner-wrapper {
+    padding: 40px;
     flex: 1 1 auto;
     display: flex;
     flex-direction: row;
@@ -168,9 +174,9 @@
   }
 
   .spectrum-Modal {
+    border: 2px solid var(--spectrum-global-color-gray-200);
     overflow: visible;
     max-height: none;
-    margin: 40px 0;
     transform: none;
     --spectrum-dialog-confirm-border-radius: var(
       --spectrum-global-dimension-size-100

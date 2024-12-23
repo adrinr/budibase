@@ -75,7 +75,7 @@ describe("table sdk", () => {
       const view1 = getTable()
       const view2 = getTable()
       const view3 = getTable()
-      const res = sdk.tables.enrichViewSchemas({
+      const res = await sdk.tables.enrichViewSchemas({
         ...basicTable,
         views: {
           [view1.name]: view1,
@@ -84,7 +84,7 @@ describe("table sdk", () => {
         },
       })
 
-      expect(sdk.views.enrichSchema).toBeCalledTimes(3)
+      expect(sdk.views.enrichSchema).toHaveBeenCalledTimes(3)
 
       expect(res).toEqual({
         ...basicTable,

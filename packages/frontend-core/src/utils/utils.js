@@ -1,3 +1,9 @@
+import { makePropSafe as safe } from "@budibase/string-templates"
+import { Helpers } from "@budibase/bbui"
+import { cloneDeep } from "lodash"
+
+export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
 /**
  * Utility to wrap an async function and ensure all invocations happen
  * sequentially.
@@ -105,4 +111,268 @@ export const domDebounce = callback => {
       })
     }
   }
+}
+
+/**
+ * Build the default FormBlock button configs per actionType
+ * Parse any legacy button config and mirror its the outcome
+ *
+ * @param {any} props
+ * */
+export const buildFormBlockButtonConfig = props => {
+  const {
+    _id,
+    actionType,
+    dataSource,
+    notificationOverride,
+    actionUrl,
+    showDeleteButton,
+    deleteButtonLabel,
+    showSaveButton,
+    saveButtonLabel,
+  } = props || {}
+
+  if (!_id) {
+    return
+  }
+  const formId = `${_id}-form`
+  const repeaterId = `${_id}-repeater`
+  const resourceId = dataSource?.resourceId
+
+  // Accommodate old config to ensure delete button does not reappear
+  const deleteText = showDeleteButton === false ? "" : deleteButtonLabel?.trim()
+  const saveText = showSaveButton === false ? "" : saveButtonLabel?.trim()
+
+  const onSave = [
+    {
+      "##eventHandlerType": "Validate Form",
+      parameters: {
+        componentId: formId,
+      },
+    },
+    {
+      "##eventHandlerType": "Save Row",
+      parameters: {
+        providerId: formId,
+        tableId: resourceId,
+        notificationOverride,
+        confirm: null,
+      },
+    },
+    {
+      "##eventHandlerType": "Close Screen Modal",
+    },
+    {
+      "##eventHandlerType": "Close Side Panel",
+    },
+    {
+      "##eventHandlerType": "Close Modal",
+    },
+    // Clear a create form once submitted
+    ...(actionType !== "Create"
+      ? []
+      : [
+          {
+            "##eventHandlerType": "Clear Form",
+            parameters: {
+              componentId: formId,
+            },
+          },
+        ]),
+
+    ...(actionUrl
+      ? [
+          {
+            "##eventHandlerType": "Navigate To",
+            parameters: {
+              url: actionUrl,
+            },
+          },
+        ]
+      : []),
+  ]
+
+  const onDelete = [
+    {
+      "##eventHandlerType": "Delete Row",
+      parameters: {
+        confirm: true,
+        tableId: resourceId,
+        rowId: `{{ ${safe(repeaterId)}.${safe("_id")} }}`,
+        revId: `{{ ${safe(repeaterId)}.${safe("_rev")} }}`,
+        notificationOverride,
+      },
+    },
+    {
+      "##eventHandlerType": "Close Screen Modal",
+    },
+    {
+      "##eventHandlerType": "Close Side Panel",
+    },
+
+    ...(actionUrl
+      ? [
+          {
+            "##eventHandlerType": "Navigate To",
+            parameters: {
+              url: actionUrl,
+            },
+          },
+        ]
+      : []),
+  ]
+
+  const defaultButtons = []
+
+  if (["Update", "Create"].includes(actionType) && showSaveButton !== false) {
+    defaultButtons.push({
+      text: saveText || "Save",
+      _id: Helpers.uuid(),
+      _component: "@budibase/standard-components/button",
+      onClick: onSave,
+      type: "cta",
+    })
+  }
+
+  if (actionType === "Update" && showDeleteButton !== false) {
+    defaultButtons.push({
+      text: deleteText || "Delete",
+      _id: Helpers.uuid(),
+      _component: "@budibase/standard-components/button",
+      onClick: onDelete,
+      quiet: true,
+      type: "warning",
+    })
+  }
+
+  return defaultButtons
+}
+
+export const buildMultiStepFormBlockDefaultProps = props => {
+  const { _id, stepCount, currentStep, actionType, dataSource } = props || {}
+
+  // Sanity check
+  if (!_id || !stepCount) {
+    return
+  }
+
+  const title = `Step {{ [${_id}-form].[__currentStep] }}`
+  const resourceId = dataSource?.resourceId
+  const formId = `${_id}-form`
+  let buttons = []
+
+  // Add previous step button if we aren't the first step
+  if (currentStep !== 0) {
+    buttons.push({
+      _id: Helpers.uuid(),
+      _component: "@budibase/standard-components/button",
+      _instanceName: Helpers.uuid(),
+      text: "Back",
+      type: "secondary",
+      size: "M",
+      onClick: [
+        {
+          parameters: {
+            type: "prev",
+            componentId: formId,
+          },
+          "##eventHandlerType": "Change Form Step",
+        },
+      ],
+    })
+  }
+
+  // Add a next button if we aren't the last step
+  if (currentStep !== stepCount - 1) {
+    buttons.push({
+      _id: Helpers.uuid(),
+      _component: "@budibase/standard-components/button",
+      _instanceName: Helpers.uuid(),
+      text: "Next",
+      type: "cta",
+      size: "M",
+      onClick: [
+        {
+          "##eventHandlerType": "Validate Form",
+          parameters: {
+            componentId: formId,
+          },
+        },
+        {
+          parameters: {
+            type: "next",
+            componentId: formId,
+          },
+          "##eventHandlerType": "Change Form Step",
+        },
+      ],
+    })
+  }
+
+  // Add save button if we are the last step
+  if (actionType !== "View" && currentStep === stepCount - 1) {
+    buttons.push({
+      _id: Helpers.uuid(),
+      _component: "@budibase/standard-components/button",
+      _instanceName: Helpers.uuid(),
+      text: "Save",
+      type: "cta",
+      size: "M",
+      onClick: [
+        {
+          "##eventHandlerType": "Validate Form",
+          parameters: {
+            componentId: formId,
+          },
+        },
+        {
+          "##eventHandlerType": "Save Row",
+          parameters: {
+            tableId: resourceId,
+            providerId: formId,
+          },
+        },
+        // Clear a create form once submitted
+        ...(actionType !== "Create"
+          ? []
+          : [
+              {
+                "##eventHandlerType": "Clear Form",
+                parameters: {
+                  componentId: formId,
+                },
+              },
+            ]),
+      ],
+    })
+  }
+
+  return {
+    buttons,
+    title,
+  }
+}
+
+/**
+ * Parse out empty or invalid UI filters and clear empty groups
+ * @param {Object} filter UI filter
+ * @returns {Object} parsed filter
+ */
+export function parseFilter(filter) {
+  if (!filter?.groups) {
+    return filter
+  }
+
+  const update = cloneDeep(filter)
+
+  update.groups = update.groups
+    .map(group => {
+      group.filters = group.filters.filter(filter => {
+        return filter.field && filter.operator
+      })
+      return group.filters.length ? group : null
+    })
+    .filter(group => group)
+
+  return update
 }

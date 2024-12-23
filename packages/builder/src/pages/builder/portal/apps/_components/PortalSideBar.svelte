@@ -1,59 +1,29 @@
 <script>
-  import { Icon, Body } from "@budibase/bbui"
-  import { apps, sideBarCollapsed } from "stores/portal"
+  import { sideBarCollapsed, enrichedApps } from "stores/portal"
   import { params, goto } from "@roxi/routify"
-  import { tick } from "svelte"
   import NavItem from "components/common/NavItem.svelte"
+  import NavHeader from "components/common/NavHeader.svelte"
+  import AppNavItem from "./AppNavItem.svelte"
 
-  let searchInput
   let searchString
-  let searching = false
+  let opened
 
-  $: filteredApps = $apps
-    .filter(app => {
-      return (
-        !searchString ||
-        app.name.toLowerCase().includes(searchString.toLowerCase())
-      )
-    })
-    .sort((a, b) => {
-      const lowerA = a.name.toLowerCase()
-      const lowerB = b.name.toLowerCase()
-      return lowerA > lowerB ? 1 : -1
-    })
-
-  const startSearching = async () => {
-    searching = true
-    searchString = ""
-    await tick()
-    searchInput.focus()
-  }
-
-  const stopSearching = () => {
-    searching = false
-    searchString = ""
-  }
+  $: filteredApps = $enrichedApps.filter(app => {
+    return (
+      !searchString ||
+      app.name.toLowerCase().includes(searchString.toLowerCase())
+    )
+  })
 </script>
 
 <div class="side-bar" class:collapsed={$sideBarCollapsed}>
   <div class="side-bar-controls">
-    {#if searching}
-      <input
-        bind:this={searchInput}
-        bind:value={searchString}
-        placeholder="Search for apps"
-      />
-    {:else}
-      <Body size="S">Apps</Body>
-      <Icon name="Search" size="S" hoverable on:click={startSearching} />
-    {/if}
-    <div class="rotational" class:rotated={searching}>
-      <Icon
-        name="Add"
-        hoverable
-        on:click={searching ? stopSearching : () => $goto("./create")}
-      />
-    </div>
+    <NavHeader
+      title="Apps"
+      placeholder="Search for apps"
+      bind:value={searchString}
+      onAdd={() => $goto("./create")}
+    />
   </div>
   <div class="side-bar-nav">
     <NavItem
@@ -63,13 +33,13 @@
       selected={!$params.appId}
     />
     {#each filteredApps as app}
-      <NavItem
-        text={app.name}
-        icon={app.icon?.name || "Apps"}
-        iconColor={app.icon?.color}
-        selected={$params.appId === app.appId}
-        on:click={() => $goto(`./${app.appId}`)}
-      />
+      <span
+        class="side-bar-app-entry"
+        class:favourite={app.favourite}
+        class:actionsOpen={opened == app.appId}
+      >
+        <AppNavItem {app} />
+      </span>
     {/each}
   </div>
 </div>
@@ -103,32 +73,8 @@
     gap: var(--spacing-l);
     padding: 0 var(--spacing-l);
   }
-  .side-bar-controls :global(.spectrum-Body),
-  .side-bar-controls input {
-    flex: 1 1 auto;
-  }
   .side-bar-controls :global(.spectrum-Icon) {
     color: var(--spectrum-global-color-gray-700);
-  }
-
-  input {
-    outline: none;
-    border: none;
-    max-width: none;
-    flex: 1 1 auto;
-    color: var(--spectrum-global-color-gray-800);
-    font-size: 14px;
-    padding: 0;
-    transition: border 130ms ease-out;
-    font-family: var(--font-sans);
-    background: inherit;
-  }
-  input::placeholder {
-    color: var(--spectrum-global-color-gray-700);
-    transition: color 130ms ease-out;
-  }
-  input:hover::placeholder {
-    color: var(--spectrum-global-color-gray-800);
   }
 
   .side-bar-nav {
@@ -137,10 +83,9 @@
     overflow-x: hidden;
   }
 
-  div.rotational {
-    transition: transform 130ms ease-out;
-  }
-  div.rotational.rotated {
-    transform: rotate(45deg);
+  .side-bar-app-entry :global(.nav-item-content .actions) {
+    width: auto;
+    display: flex;
+    gap: var(--spacing-s);
   }
 </style>

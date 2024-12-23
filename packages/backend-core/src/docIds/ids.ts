@@ -19,6 +19,14 @@ export const generateAppID = (tenantId?: string | null) => {
 }
 
 /**
+ * Generates a new table ID.
+ * @returns The new table ID which the table doc can be stored under.
+ */
+export function generateTableID() {
+  return `${DocumentType.TABLE}${SEPARATOR}${newid()}`
+}
+
+/**
  * Gets a new row ID for the specified table.
  * @param tableId The table which the row is being created for.
  * @param id If an ID is to be used then the UUID can be substituted for this.
@@ -74,7 +82,7 @@ export function getGlobalIDFromUserMetadataID(id: string) {
  * Generates a template ID.
  * @param ownerId The owner/user of the template, this could be global or a workspace level.
  */
-export function generateTemplateID(ownerId: any) {
+export function generateTemplateID(ownerId: string) {
   return `${DocumentType.TEMPLATE}${SEPARATOR}${ownerId}${SEPARATOR}${newid()}`
 }
 
@@ -105,7 +113,7 @@ export function prefixRoleID(name: string) {
  * Generates a new dev info document ID - this is scoped to a user.
  * @returns The new dev info ID which info for dev (like api key) can be stored under.
  */
-export const generateDevInfoID = (userId: any) => {
+export const generateDevInfoID = (userId: string) => {
   return `${DocumentType.DEV_INFO}${SEPARATOR}${userId}`
 }
 

@@ -12,29 +12,32 @@ import {
 } from "@budibase/types"
 import sdk from "../../../sdk"
 
-export async function save(ctx: UserCtx<SaveTableRequest, SaveTableResponse>) {
-  const { rows, ...rest } = ctx.request.body
-  let tableToSave: Table & {
-    _rename?: RenameColumn
-  } = {
+export async function updateTable(
+  ctx: UserCtx<SaveTableRequest, SaveTableResponse>,
+  renaming?: RenameColumn
+) {
+  const { _rename, rows, ...rest } = ctx.request.body
+  let tableToSave: Table = {
     _id: generateTableID(),
     ...rest,
-    type: "table",
-    sourceType: TableSourceType.INTERNAL,
-    views: {},
+    // Ensure these fields are populated, even if not sent in the request
+    type: rest.type || "table",
+    sourceType: rest.sourceType || TableSourceType.INTERNAL,
   }
-  const renaming = tableToSave._rename
-  delete tableToSave._rename
+
+  if (!tableToSave.views) {
+    tableToSave.views = {}
+  }
 
   try {
-    const { table } = await sdk.tables.internal.save(tableToSave, {
-      user: ctx.user,
+    const { table, oldTable } = await sdk.tables.internal.save(tableToSave, {
+      userId: ctx.user._id,
       rowsToImport: rows,
       tableId: ctx.request.body._id,
-      renaming: renaming,
+      renaming,
     })
 
-    return table
+    return { table, oldTable }
   } catch (err: any) {
     if (err instanceof Error) {
       ctx.throw(400, err.message)
@@ -66,7 +69,7 @@ export async function bulkImport(
   await handleDataImport(table, {
     importRows: rows,
     identifierFields,
-    user: ctx.user,
+    userId: ctx.user._id,
   })
   return table
 }

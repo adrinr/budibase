@@ -5,7 +5,7 @@ import {
   roles,
   users,
 } from "@budibase/backend-core"
-import { PermissionLevel, PermissionType, Role, UserCtx } from "@budibase/types"
+import { PermissionLevel, PermissionType, UserCtx } from "@budibase/types"
 import builderMiddleware from "./builder"
 import { isWebhookEndpoint } from "./utils"
 import { paramResource } from "./resourceId"
@@ -31,13 +31,20 @@ const checkAuthorized = async (
 ) => {
   const appId = context.getAppId()
   const isGlobalBuilderApi = permType === PermissionType.GLOBAL_BUILDER
+  const isCreatorApi = permType === PermissionType.CREATOR
   const isBuilderApi = permType === PermissionType.BUILDER
-  const globalBuilder = users.isGlobalBuilder(ctx.user)
-  let isBuilder = appId
+  const isGlobalBuilder = users.isGlobalBuilder(ctx.user)
+  const isCreator = await users.isCreator(ctx.user)
+  const isBuilder = appId
     ? users.isBuilder(ctx.user, appId)
     : users.hasBuilderPermissions(ctx.user)
-  // check if this is a builder api and the user is not a builder
-  if ((isGlobalBuilderApi && !globalBuilder) || (isBuilderApi && !isBuilder)) {
+
+  // check api permission type against user
+  if (
+    (isGlobalBuilderApi && !isGlobalBuilder) ||
+    (isCreatorApi && !isCreator) ||
+    (isBuilderApi && !isBuilder)
+  ) {
     return ctx.throw(403, "Not Authorized")
   }
 
@@ -81,7 +88,7 @@ const authorized =
     opts = { schema: false },
     resourcePath?: string
   ) =>
-  async (ctx: any, next: any) => {
+  async (ctx: UserCtx, next: any) => {
     // webhooks don't need authentication, each webhook unique
     // also internal requests (between services) don't need authorized
     if (isWebhookEndpoint(ctx) || ctx.internal) {
@@ -89,7 +96,7 @@ const authorized =
     }
 
     if (!ctx.user) {
-      return ctx.throw(403, "No user info found")
+      return ctx.throw(401, "No user info found")
     }
 
     // get the resource roles
@@ -113,7 +120,7 @@ const authorized =
         !!subResourceId &&
         (await sdk.permissions.getResourcePerms(subResourceId))
 
-      function getPermLevel(permLevel: string) {
+      const getPermLevel = (permLevel: string) => {
         let result: string[] = []
         if (permissions[permLevel]) {
           result.push(permissions[permLevel].role)
@@ -141,13 +148,14 @@ const authorized =
 
     // check authenticated
     if (!ctx.isAuthenticated) {
-      return ctx.throw(403, "Session not authenticated")
+      return ctx.throw(401, "Session not authenticated")
     }
 
     // check general builder stuff, this middleware is a good way
     // to find API endpoints which are builder focused
     if (
       permType === PermissionType.BUILDER ||
+      permType === PermissionType.CREATOR ||
       permType === PermissionType.GLOBAL_BUILDER
     ) {
       await builderMiddleware(ctx)

@@ -8,9 +8,10 @@ import {
   paramResource,
 } from "../../middleware/resourceId"
 import {
-  generateQueryPreviewValidation,
   generateQueryValidation,
+  generateQueryPreviewValidation,
 } from "../controllers/query/validation"
+
 const { BUILDER, PermissionType, PermissionLevel } = permissions
 
 const router: Router = new Router()
@@ -55,7 +56,7 @@ router
     "/api/v2/queries/:queryId",
     paramResource("queryId"),
     authorized(PermissionType.QUERY, PermissionLevel.WRITE),
-    queryController.executeV2 as any
+    queryController.executeV2
   )
 
 export default router

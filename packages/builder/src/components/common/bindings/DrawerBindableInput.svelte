@@ -3,29 +3,32 @@
   import {
     readableToRuntimeBinding,
     runtimeToReadableBinding,
-  } from "builderStore/dataBinding"
-
+  } from "dataBinding"
   import ClientBindingPanel from "components/common/bindings/ClientBindingPanel.svelte"
   import { createEventDispatcher, setContext } from "svelte"
   import { isJSBinding } from "@budibase/string-templates"
+  import { builderStore } from "stores/builder"
 
   export let panel = ClientBindingPanel
   export let value = ""
   export let bindings = []
-  export let title = "Bindings"
+  export let title
   export let placeholder
   export let label
   export let disabled = false
-  export let fillWidth
+  export let allowHBS = true
   export let allowJS = true
   export let allowHelpers = true
   export let updateOnChange = true
-  export let drawerLeft
+  export let key
   export let disableBindings = false
+  export let forceModal = false
+  export let context = null
+  export let autocomplete
 
   const dispatch = createEventDispatcher()
+
   let bindingDrawer
-  let valid = true
   let currentVal = value
 
   $: readableValue = runtimeToReadableBinding(bindings, value)
@@ -35,6 +38,7 @@
   const saveBinding = () => {
     onChange(tempValue)
     onBlur()
+    builderStore.propertyFocus()
     bindingDrawer.hide()
   }
 
@@ -50,8 +54,15 @@
   const onBlur = () => {
     dispatch("blur", currentVal)
   }
+
+  const onDrawerHide = e => {
+    builderStore.propertyFocus()
+    dispatch("drawerHide", e.detail)
+  }
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="control" class:disabled>
   <Input
     {label}
@@ -62,11 +73,13 @@
     on:blur={onBlur}
     {placeholder}
     {updateOnChange}
+    {autocomplete}
   />
   {#if !disabled && !disableBindings}
     <div
       class="icon"
       on:click={() => {
+        builderStore.propertyFocus(key)
         bindingDrawer.show()
       }}
     >
@@ -75,29 +88,23 @@
   {/if}
 </div>
 <Drawer
-  on:drawerHide
+  on:drawerHide={onDrawerHide}
   on:drawerShow
-  {fillWidth}
   bind:this={bindingDrawer}
-  {title}
-  left={drawerLeft}
-  headless
+  title={title ?? placeholder ?? "Bindings"}
+  {forceModal}
 >
-  <svelte:fragment slot="description">
-    Add the objects on the left to enrich your text.
-  </svelte:fragment>
-  <Button cta slot="buttons" disabled={!valid} on:click={saveBinding}>
-    Save
-  </Button>
+  <Button cta slot="buttons" on:click={saveBinding}>Save</Button>
   <svelte:component
     this={panel}
     slot="body"
-    bind:valid
     value={readableValue}
     on:change={event => (tempValue = event.detail)}
     {bindings}
+    {allowHBS}
     {allowJS}
     {allowHelpers}
+    {context}
   />
 </Drawer>
 

@@ -140,10 +140,7 @@
     if (image) {
       let data = new FormData()
       data.append("file", image)
-      await API.uploadOIDCLogo({
-        name: image.name,
-        data,
-      })
+      await API.uploadOIDCLogo(image.name, data)
     }
   }
 
@@ -252,6 +249,8 @@
   })
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <Layout noPadding>
   <Layout gap="XS" noPadding>
     <Heading size="M">Authentication</Heading>
@@ -283,7 +282,7 @@
         </div>
         {#if !$licensing.enforceableSSO}
           <Tags>
-            <Tag icon="LockClosed">Enterprise</Tag>
+            <Tag icon="LockClosed">Enterprise plan</Tag>
           </Tags>
         {/if}
       </div>

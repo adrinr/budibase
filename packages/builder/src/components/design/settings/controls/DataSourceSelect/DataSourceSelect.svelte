@@ -1,9 +1,8 @@
 <script>
   import {
-    getContextProviderComponents,
     readableToRuntimeBinding,
     runtimeToReadableBinding,
-  } from "builderStore/dataBinding"
+  } from "dataBinding"
   import {
     Button,
     Popover,
@@ -18,20 +17,24 @@
     notifications,
   } from "@budibase/bbui"
   import { createEventDispatcher } from "svelte"
-  import { store, currentAsset } from "builderStore"
   import {
     tables as tablesStore,
     queries as queriesStore,
     viewsV2 as viewsV2Store,
     views as viewsStore,
-  } from "stores/backend"
-  import { datasources, integrations } from "stores/backend"
+    selectedScreen,
+    componentStore,
+    datasources,
+    integrations,
+  } from "stores/builder"
   import BindingBuilder from "components/integration/QueryBindingBuilder.svelte"
   import IntegrationQueryEditor from "components/integration/index.svelte"
   import { makePropSafe as safe } from "@budibase/string-templates"
+  import { findAllComponents } from "helpers/components"
   import ClientBindingPanel from "components/common/bindings/ClientBindingPanel.svelte"
   import DataSourceCategory from "components/design/settings/controls/DataSourceSelect/DataSourceCategory.svelte"
   import { API } from "api"
+  import { datasourceSelect as format } from "helpers/data/format"
 
   export let value = {}
   export let otherSources
@@ -46,25 +49,28 @@
   let drawer
   let tmpQueryParams
   let tmpCustomData
-  let customDataValid = true
   let modal
 
   $: text = value?.label ?? "Choose an option"
-  $: tables = $tablesStore.list.map(m => ({
-    label: m.name,
-    tableId: m._id,
-    type: "table",
-  }))
+  $: tables = $tablesStore.list
+    .map(table => format.table(table, $datasources.list))
+    .sort((a, b) => {
+      // sort tables alphabetically, grouped by datasource
+      const dsA = a.datasourceName ?? ""
+      const dsB = b.datasourceName ?? ""
+
+      const dsComparison = dsA.localeCompare(dsB)
+      if (dsComparison !== 0) {
+        return dsComparison
+      }
+      return a.label.localeCompare(b.label)
+    })
   $: viewsV1 = $viewsStore.list.map(view => ({
     ...view,
     label: view.name,
     type: "view",
   }))
-  $: viewsV2 = $viewsV2Store.list.map(view => ({
-    ...view,
-    label: view.name,
-    type: "viewV2",
-  }))
+  $: viewsV2 = $viewsV2Store.list.map(format.viewV2)
   $: views = [...(viewsV1 || []), ...(viewsV2 || [])]
   $: queries = $queriesStore.list
     .filter(q => showAllQueries || q.queryVerb === "read" || q.readable)
@@ -74,12 +80,13 @@
       ...query,
       type: "query",
     }))
-  $: contextProviders = getContextProviderComponents(
-    $currentAsset,
-    $store.selectedComponentId
-  )
-  $: dataProviders = contextProviders
-    .filter(component => component._component?.endsWith("/dataprovider"))
+  $: dataProviders = findAllComponents($selectedScreen.props)
+    .filter(component => {
+      return (
+        component._component?.endsWith("/dataprovider") &&
+        component._id !== $componentStore.selectedComponentId
+      )
+    })
     .map(provider => ({
       label: provider._instanceName,
       name: provider._instanceName,
@@ -110,6 +117,7 @@
     })
   $: fields = bindings
     .filter(x => arrayTypes.includes(x.fieldSchema?.type))
+    .filter(x => x.fieldSchema?.tableId != null)
     .map(binding => {
       const { providerId, readableBinding, runtimeBinding } = binding
       const { name, type, tableId } = binding.fieldSchema
@@ -124,10 +132,14 @@
       }
     })
   $: jsonArrays = bindings
-    .filter(x => x.fieldSchema?.type === "jsonarray")
+    .filter(
+      x =>
+        x.fieldSchema?.type === "jsonarray" ||
+        (x.fieldSchema?.type === "json" && x.fieldSchema?.subtype === "array")
+    )
     .map(binding => {
       const { providerId, readableBinding, runtimeBinding, tableId } = binding
-      const { name, type, prefixKeys } = binding.fieldSchema
+      const { name, type, prefixKeys, subtype } = binding.fieldSchema
       return {
         providerId,
         label: readableBinding,
@@ -135,7 +147,8 @@
         fieldType: type,
         tableId,
         prefixKeys,
-        type: "jsonarray",
+        type: type === "jsonarray" ? "jsonarray" : "queryarray",
+        subtype,
         value: `{{ literal ${runtimeBinding} }}`,
       }
     })
@@ -259,14 +272,11 @@
     <Drawer title="Custom data" bind:this={drawer}>
       <div slot="buttons" style="display:contents">
         <Button primary on:click={promptForCSV}>Load CSV</Button>
-        <Button cta on:click={saveCustomData} disabled={!customDataValid}>
-          Save
-        </Button>
+        <Button cta on:click={saveCustomData}>Save</Button>
       </div>
       <div slot="description">Provide a JSON array to use as data</div>
       <ClientBindingPanel
         slot="body"
-        bind:valid={customDataValid}
         value={tmpCustomData}
         on:change={event => (tmpCustomData = event.detail)}
         {bindings}
@@ -305,7 +315,7 @@
     {#if links?.length}
       <DataSourceCategory
         dividerState={true}
-        heading="Links"
+        heading="Relationships"
         dataSet={links}
         {value}
         onSelect={handleSelected}

@@ -1,10 +1,9 @@
-import { Server } from "socket.io"
+import { Server, Socket } from "socket.io"
 import http from "http"
 import Koa from "koa"
 import { userAgent } from "koa-useragent"
 import { auth, Header, redis } from "@budibase/backend-core"
 import { createAdapter } from "@socket.io/redis-adapter"
-import { Socket } from "socket.io"
 import { getSocketPubSubClients } from "../utilities/redis"
 import { SocketEvent, SocketSessionTTL } from "@budibase/shared-core"
 import { SocketSession } from "@budibase/types"
@@ -34,7 +33,7 @@ export class BaseSocket {
   constructor(
     app: Koa,
     server: http.Server,
-    path: string = "/",
+    path = "/",
     additionalMiddlewares?: any[]
   ) {
     this.app = app
@@ -58,7 +57,7 @@ export class BaseSocket {
       const ctx = createContext(this.app, socket)
 
       try {
-        await runMiddlewares(ctx, middlewares, () => {
+        await runMiddlewares(ctx, middlewares, async () => {
           // Middlewares are finished
           // Extract some data from our enriched koa context to persist
           // as metadata for the socket
@@ -251,7 +250,7 @@ export class BaseSocket {
   }
 
   // Updates a connected user's metadata, assuming a room change is not required.
-  async updateUser(socket: Socket, patch: Object) {
+  async updateUser(socket: Socket, patch: object) {
     socket.data = {
       ...socket.data,
       ...patch,
@@ -263,11 +262,11 @@ export class BaseSocket {
     }
   }
 
-  async onConnect(socket: Socket) {
+  async onConnect(_socket: Socket) {
     // Override
   }
 
-  async onDisconnect(socket: Socket) {
+  async onDisconnect(_socket: Socket) {
     // Override
   }
 

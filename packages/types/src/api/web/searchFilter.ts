@@ -1,68 +1,59 @@
 import { FieldType } from "../../documents"
-import { EmptyFilterOption } from "../../sdk"
+import {
+  EmptyFilterOption,
+  UILogicalOperator,
+  BasicOperator,
+  RangeOperator,
+  ArrayOperator,
+} from "../../sdk"
 
+type AllOr = {
+  operator: "allOr"
+}
+
+type OnEmptyFilter = {
+  onEmptyFilter: EmptyFilterOption
+}
+
+// TODO(samwho): this could be broken down further
 export type SearchFilter = {
-  operator: keyof SearchQuery
-  onEmptyFilter?: EmptyFilterOption
+  operator:
+    | BasicOperator
+    | RangeOperator
+    | ArrayOperator
+    | "rangeLow"
+    | "rangeHigh"
+  // Field name will often have a numerical prefix when coming from the frontend,
+  // use the ColumnSplitter class to remove it.
   field: string
-  type?: FieldType
   value: any
+  type?: FieldType
   externalType?: string
+  noValue?: boolean
+  valueType?: string
+  formulaType?: string
 }
 
-export enum SearchQueryOperators {
-  STRING = "string",
-  FUZZY = "fuzzy",
-  RANGE = "range",
-  EQUAL = "equal",
-  NOT_EQUAL = "notEqual",
-  EMPTY = "empty",
-  NOT_EMPTY = "notEmpty",
-  ONE_OF = "oneOf",
-  CONTAINS = "contains",
-  NOT_CONTAINS = "notContains",
-  CONTAINS_ANY = "containsAny",
+// Prior to v2, this is the type the frontend sent us when filters were
+// involved. We convert this to a SearchFilters before use with the search SDK.
+export type LegacyFilter = AllOr | OnEmptyFilter | SearchFilter
+
+export type SearchFilterGroup = {
+  logicalOperator?: UILogicalOperator
+  groups?: SearchFilterGroup[]
+  filters?: LegacyFilter[]
 }
 
-export type SearchQuery = {
-  allOr?: boolean
+// As of v3, this is the format that the frontend always sends when search
+// filters are involved. We convert this to SearchFilters before use with the
+// search SDK.
+//
+// The reason we migrated was that we started to support "logical operators" in
+// tests and SearchFilters because a recursive data structure. LegacyFilter[]
+// wasn't able to support these sorts of recursive structures, so we changed the
+// format.
+export type UISearchFilter = {
+  logicalOperator?: UILogicalOperator
   onEmptyFilter?: EmptyFilterOption
-  [SearchQueryOperators.STRING]?: {
-    [key: string]: string
-  }
-  [SearchQueryOperators.FUZZY]?: {
-    [key: string]: string
-  }
-  [SearchQueryOperators.RANGE]?: {
-    [key: string]: {
-      high: number | string
-      low: number | string
-    }
-  }
-  [SearchQueryOperators.EQUAL]?: {
-    [key: string]: any
-  }
-  [SearchQueryOperators.NOT_EQUAL]?: {
-    [key: string]: any
-  }
-  [SearchQueryOperators.EMPTY]?: {
-    [key: string]: any
-  }
-  [SearchQueryOperators.NOT_EMPTY]?: {
-    [key: string]: any
-  }
-  [SearchQueryOperators.ONE_OF]?: {
-    [key: string]: any[]
-  }
-  [SearchQueryOperators.CONTAINS]?: {
-    [key: string]: any[]
-  }
-  [SearchQueryOperators.NOT_CONTAINS]?: {
-    [key: string]: any[]
-  }
-  [SearchQueryOperators.CONTAINS_ANY]?: {
-    [key: string]: any[]
-  }
+  groups?: SearchFilterGroup[]
 }
-
-export type SearchQueryFields = Omit<SearchQuery, "allOr" | "onEmptyFilter">

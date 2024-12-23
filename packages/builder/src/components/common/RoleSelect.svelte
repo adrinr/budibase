@@ -1,9 +1,9 @@
 <script>
   import { Select, FancySelect } from "@budibase/bbui"
-  import { roles } from "stores/backend"
+  import { roles } from "stores/builder"
   import { licensing } from "stores/portal"
 
-  import { Constants, RoleUtils } from "@budibase/frontend-core"
+  import { Constants } from "@budibase/frontend-core"
   import { createEventDispatcher } from "svelte"
   import { capitalise } from "helpers"
 
@@ -20,73 +20,94 @@
   export let allowedRoles = null
   export let allowCreator = false
   export let fancySelect = false
+  export let labelPrefix = null
 
   const dispatch = createEventDispatcher()
   const RemoveID = "remove"
+  const subType = $licensing.license.plan.type ?? null
 
+  $: enrichLabel = label => (labelPrefix ? `${labelPrefix} ${label}` : label)
   $: options = getOptions(
     $roles,
     allowPublic,
     allowRemove,
     allowedRoles,
-    allowCreator
+    allowCreator,
+    enrichLabel
   )
+
   const getOptions = (
     roles,
     allowPublic,
     allowRemove,
     allowedRoles,
-    allowCreator
+    allowCreator,
+    enrichLabel
   ) => {
+    // Use roles whitelist if specified
     if (allowedRoles?.length) {
-      const filteredRoles = roles.filter(role =>
-        allowedRoles.includes(role._id)
-      )
-      return [
-        ...filteredRoles,
-        ...(allowedRoles.includes(Constants.Roles.CREATOR)
-          ? [{ _id: Constants.Roles.CREATOR, name: "Creator", enabled: false }]
-          : []),
-      ]
-    }
-    let newRoles = [...roles]
-
-    if (allowCreator) {
-      newRoles = [
-        {
+      let options = roles
+        .filter(role => allowedRoles.includes(role._id))
+        .map(role => ({
+          color: role.uiMetadata.color,
+          name: enrichLabel(role.uiMetadata.displayName),
+          _id: role._id,
+        }))
+      if (allowedRoles.includes(Constants.Roles.CREATOR)) {
+        options.push({
           _id: Constants.Roles.CREATOR,
-          name: "Creator",
-          tag:
-            !$licensing.perAppBuildersEnabled &&
-            capitalise(Constants.PlanType.BUSINESS),
-        },
-        ...newRoles,
-      ]
+          name: "Can edit",
+          enabled: false,
+        })
+      }
+      return options
     }
+
+    // Allow all core roles
+    let options = roles.map(role => ({
+      color: role.uiMetadata.color,
+      name: enrichLabel(role.uiMetadata.displayName),
+      _id: role._id,
+    }))
+
+    // Add creator if required
+    if (allowCreator || isEnterprisePlan(subType)) {
+      options.unshift({
+        _id: Constants.Roles.CREATOR,
+        name: "Can edit",
+        tag: isEnterprisePlan(subType)
+          ? null
+          : capitalise(Constants.PlanType.ENTERPRISE),
+      })
+    }
+
+    // Add remove option if required
     if (allowRemove) {
-      newRoles = [
-        ...newRoles,
-        {
-          _id: RemoveID,
-          name: "Remove",
-        },
-      ]
+      options.push({
+        _id: RemoveID,
+        name: "Remove",
+      })
     }
-    if (allowPublic) {
-      return newRoles
+
+    // Remove public if not allowed
+    if (!allowPublic) {
+      options = options.filter(role => role._id !== Constants.Roles.PUBLIC)
     }
-    return newRoles.filter(role => role._id !== Constants.Roles.PUBLIC)
+
+    return options
   }
 
   const getColor = role => {
-    if (allowRemove && role._id === RemoveID) {
+    // Creator and remove options have no colors
+    if (role._id === Constants.Roles.CREATOR || role._id === RemoveID) {
       return null
     }
-    return RoleUtils.getRoleColour(role._id)
+    return role.color || "var(--spectrum-global-color-static-magenta-400)"
   }
 
   const getIcon = role => {
-    if (allowRemove && role._id === RemoveID) {
+    // Only remove option has an icon
+    if (role._id === RemoveID) {
       return "Close"
     }
     return null
@@ -98,6 +119,14 @@
     } else {
       dispatch("change", e.detail)
     }
+  }
+
+  function isEnterprisePlan(subType) {
+    return (
+      subType === Constants.PlanType.ENTERPRISE ||
+      subType === Constants.PlanType.ENTERPRISE_BASIC ||
+      subType === Constants.PlanType.ENTERPRISE_BASIC_TRIAL
+    )
   }
 </script>
 
@@ -116,9 +145,12 @@
     getOptionValue={role => role._id}
     getOptionColour={getColor}
     getOptionIcon={getIcon}
-    isOptionEnabled={option =>
-      option._id !== Constants.Roles.CREATOR ||
-      $licensing.perAppBuildersEnabled}
+    isOptionEnabled={option => {
+      if (option._id === Constants.Roles.CREATOR) {
+        return isEnterprisePlan(subType)
+      }
+      return true
+    }}
     {placeholder}
     {error}
   />
@@ -136,10 +168,12 @@
     getOptionValue={role => role._id}
     getOptionColour={getColor}
     getOptionIcon={getIcon}
-    isOptionEnabled={option =>
-      (option._id !== Constants.Roles.CREATOR ||
-        $licensing.perAppBuildersEnabled) &&
-      option.enabled !== false}
+    isOptionEnabled={option => {
+      if (option._id === Constants.Roles.CREATOR) {
+        return isEnterprisePlan(subType)
+      }
+      return option.enabled !== false
+    }}
     {placeholder}
     {error}
   />

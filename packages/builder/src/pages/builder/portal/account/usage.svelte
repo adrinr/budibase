@@ -15,6 +15,7 @@
   import { DashCard, Usage } from "components/usage"
   import { PlanModel } from "constants"
   import { sdk } from "@budibase/shared-core"
+  import { getFormattedPlanName } from "helpers/planTitle"
 
   let staticUsage = []
   let monthlyUsage = []
@@ -27,15 +28,13 @@
   const upgradeUrl = `${$admin.accountPortalUrl}/portal/upgrade`
   const manageUrl = `${$admin.accountPortalUrl}/portal/billing`
 
-  const WARN_USAGE = ["Queries", "Automations", "Rows", "Day Passes", "Users"]
+  const WARN_USAGE = ["Queries", "Automations", "Rows", "Users"]
+  const oneDayInSeconds = 86400
 
   const EXCLUDE_QUOTAS = {
     Queries: () => true,
     Users: license => {
       return license.plan.model !== PlanModel.PER_USER
-    },
-    "Day Passes": license => {
-      return license.plan.model !== PlanModel.DAY_PASS
     },
   }
 
@@ -99,38 +98,21 @@
     cancelAt = license?.billing?.subscription?.cancelAt
   }
 
-  const capitalise = string => {
-    if (string) {
-      return string.charAt(0).toUpperCase() + string.slice(1)
-    }
-  }
-
-  const planTitle = () => {
-    return `${capitalise(license?.plan.type)} Plan`
-  }
-
   const getDaysRemaining = timestamp => {
     if (!timestamp) {
       return
     }
-    const now = new Date()
-    now.setHours(0)
-    now.setMinutes(0)
-
-    const thenDate = new Date(timestamp)
-    thenDate.setHours(0)
-    thenDate.setMinutes(0)
-
-    const difference = thenDate.getTime() - now
-    // return the difference in days
-    return (difference / (1000 * 3600 * 24)).toFixed(0)
+    const diffTime = Math.abs(timestamp - new Date().getTime()) / 1000
+    return Math.floor(diffTime / oneDayInSeconds)
   }
 
   const setTextRows = () => {
     textRows = []
 
     if (cancelAt && !usesInvoicing) {
-      textRows.push({ message: "Subscription has been cancelled" })
+      if (plan?.type !== Constants.PlanType.ENTERPRISE_BASIC_TRIAL) {
+        textRows.push({ message: "Subscription has been cancelled" })
+      }
       textRows.push({
         message: `${getDaysRemaining(cancelAt)} days remaining`,
         tooltip: new Date(cancelAt),
@@ -219,7 +201,7 @@
 
     <DashCard
       description="YOUR CURRENT PLAN"
-      title={planTitle()}
+      title={getFormattedPlanName(license?.plan.type)}
       {primaryActionText}
       primaryAction={showButton ? goToAccountPortal : undefined}
       {textRows}

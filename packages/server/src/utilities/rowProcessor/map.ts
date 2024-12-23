@@ -1,7 +1,7 @@
-// @ts-nocheck
-import { FieldTypes } from "../../constants"
+import { sql } from "@budibase/backend-core"
+import { FieldType } from "@budibase/types"
 
-const parseArrayString = value => {
+const parseArrayString = (value: any) => {
   if (typeof value === "string") {
     if (value === "") {
       return []
@@ -21,11 +21,13 @@ const parseArrayString = value => {
  * A map of how we convert various properties in rows to each other based on the row type.
  */
 export const TYPE_TRANSFORM_MAP: any = {
-  [FieldTypes.LINK]: {
+  [FieldType.LINK]: {
     "": [],
+    //@ts-ignore
     [null]: [],
+    //@ts-ignore
     [undefined]: undefined,
-    parse: link => {
+    parse: (link: any) => {
       if (Array.isArray(link) && typeof link[0] === "object") {
         return link.map(el => (el && el._id ? el._id : el))
       }
@@ -35,70 +37,120 @@ export const TYPE_TRANSFORM_MAP: any = {
       return link
     },
   },
-  [FieldTypes.OPTIONS]: {
+  [FieldType.OPTIONS]: {
     "": null,
+    //@ts-ignore
     [null]: null,
+    //@ts-ignore
     [undefined]: undefined,
   },
-  [FieldTypes.ARRAY]: {
+  [FieldType.ARRAY]: {
+    //@ts-ignore
     [null]: [],
+    //@ts-ignore
     [undefined]: undefined,
     parse: parseArrayString,
   },
-  [FieldTypes.STRING]: {
-    "": "",
-    [null]: "",
+  [FieldType.BB_REFERENCE]: {
+    //@ts-ignore
+    [null]: [],
+    //@ts-ignore
     [undefined]: undefined,
+    parse: parseArrayString,
   },
-  [FieldTypes.BARCODEQR]: {
-    "": "",
-    [null]: "",
-    [undefined]: undefined,
-  },
-  [FieldTypes.FORMULA]: {
-    "": "",
-    [null]: "",
-    [undefined]: undefined,
-  },
-  [FieldTypes.LONGFORM]: {
-    "": "",
-    [null]: "",
-    [undefined]: undefined,
-  },
-  [FieldTypes.NUMBER]: {
+  [FieldType.STRING]: {
     "": null,
+    //@ts-ignore
     [null]: null,
+    //@ts-ignore
     [undefined]: undefined,
-    parse: n => parseFloat(n),
   },
-  [FieldTypes.DATETIME]: {
+  [FieldType.BARCODEQR]: {
     "": null,
-    [undefined]: undefined,
+    //@ts-ignore
     [null]: null,
-    parse: date => {
-      if (date instanceof Date) {
-        return date.toISOString()
+    //@ts-ignore
+    [undefined]: undefined,
+  },
+  [FieldType.FORMULA]: {
+    "": null,
+    //@ts-ignore
+    [null]: null,
+    //@ts-ignore
+    [undefined]: undefined,
+  },
+  [FieldType.LONGFORM]: {
+    "": null,
+    //@ts-ignore
+    [null]: null,
+    //@ts-ignore
+    [undefined]: undefined,
+  },
+  [FieldType.NUMBER]: {
+    "": null,
+    //@ts-ignore
+    [null]: null,
+    //@ts-ignore
+    [undefined]: undefined,
+    parse: (n: any) => {
+      const parsed = parseFloat(n)
+      if (isNaN(parsed)) {
+        throw new Error(`Invalid number value "${n}"`)
       }
-      return date
+      return parsed
     },
   },
-  [FieldTypes.ATTACHMENT]: {
+  [FieldType.BIGINT]: {
+    "": null,
+    //@ts-ignore
+    [null]: null,
+    //@ts-ignore
+    [undefined]: undefined,
+  },
+  [FieldType.DATETIME]: {
+    "": null,
+    //@ts-ignore
+    [null]: null,
+    //@ts-ignore
+    [undefined]: undefined,
+    parse: (date: any) => {
+      if (date instanceof Date) {
+        return date.toISOString()
+      } else if (typeof date === "string" && sql.utils.isValidTime(date)) {
+        return date
+      } else {
+        const parsed = new Date(date)
+        if (isNaN(parsed.getTime())) {
+          throw new Error(`Invalid date value: "${date}"`)
+        }
+        return date
+      }
+    },
+  },
+  [FieldType.ATTACHMENTS]: {
+    //@ts-ignore
     [null]: [],
+    //@ts-ignore
     [undefined]: undefined,
     parse: parseArrayString,
   },
-  [FieldTypes.BOOLEAN]: {
+  [FieldType.ATTACHMENT_SINGLE]: {
     "": null,
+  },
+  [FieldType.BOOLEAN]: {
+    "": null,
+    //@ts-ignore
     [null]: null,
+    //@ts-ignore
     [undefined]: undefined,
     true: true,
     false: false,
   },
-  [FieldTypes.AUTO]: {
+  [FieldType.AUTO]: {
     parse: () => undefined,
   },
-  [FieldTypes.JSON]: {
-    parse: input => {
+  [FieldType.JSON]: {
+    parse: (input: any) => {
       try {
         if (input === "") {
           return undefined

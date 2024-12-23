@@ -1,5 +1,6 @@
 import { get } from "svelte/store"
 import download from "downloadjs"
+import { downloadStream } from "@budibase/frontend-core"
 import {
   routeStore,
   builderStore,
@@ -11,11 +12,62 @@ import {
   uploadStore,
   rowSelectionStore,
   sidePanelStore,
+  modalStore,
 } from "stores"
 import { API } from "api"
 import { ActionTypes } from "constants"
 import { enrichDataBindings } from "./enrichDataBinding"
 import { Helpers } from "@budibase/bbui"
+
+// Default action handler, which extracts an action from context that was
+// provided by another component and executes it with all action parameters
+const contextActionHandler = async (action, context) => {
+  const key = getActionContextKey(action)
+  const fn = context[key]
+  if (fn) {
+    return await fn(action.parameters)
+  }
+}
+
+// Generates the context key, which is the key that this action depends on in
+// context to provide the function it will run. This is broken out as a util
+// because we reuse this inside the core Component.svelte file to determine
+// what the required action context keys are for all action settings.
+export const getActionContextKey = action => {
+  const type = action?.["##eventHandlerType"]
+  const key = (componentId, type) => `${componentId}_${type}`
+  switch (type) {
+    case "Scroll To Field":
+      return key(action.parameters.componentId, ActionTypes.ScrollTo)
+    case "Update Field Value":
+      return key(action.parameters.componentId, ActionTypes.UpdateFieldValue)
+    case "Validate Form":
+      return key(action.parameters.componentId, ActionTypes.ValidateForm)
+    case "Refresh Data Provider":
+      return key(action.parameters.componentId, ActionTypes.RefreshDatasource)
+    case "Clear Form":
+      return key(action.parameters.componentId, ActionTypes.ClearForm)
+    case "Change Form Step":
+      return key(action.parameters.componentId, ActionTypes.ChangeFormStep)
+    case "Clear Row Selection":
+      return key(action.parameters.componentId, ActionTypes.ClearRowSelection)
+    default:
+      return null
+  }
+}
+
+// If button actions depend on context, they must declare which keys they need
+export const getActionDependentContextKeys = action => {
+  const type = action?.["##eventHandlerType"]
+  switch (type) {
+    case "Save Row":
+    case "Duplicate Row":
+      if (action.parameters?.providerId) {
+        return [action.parameters.providerId]
+      }
+  }
+  return []
+}
 
 const saveRowHandler = async (action, context) => {
   const { fields, providerId, tableId, notificationOverride } =
@@ -32,20 +84,21 @@ const saveRowHandler = async (action, context) => {
     }
   }
   if (tableId) {
-    payload.tableId = tableId
+    if (tableId.startsWith("view")) {
+      payload._viewId = tableId
+    } else {
+      payload.tableId = tableId
+    }
   }
   try {
     const row = await API.saveRow(payload)
-
     if (!notificationOverride) {
       notificationStore.actions.success("Row saved")
     }
-
     // Refresh related datasources
     await dataSourceStore.actions.invalidateDataSource(tableId, {
       invalidateRelationships: true,
     })
-
     return { row }
   } catch (error) {
     // Abort next actions
@@ -64,7 +117,11 @@ const duplicateRowHandler = async (action, context) => {
       }
     }
     if (tableId) {
-      payload.tableId = tableId
+      if (tableId.startsWith("view")) {
+        payload._viewId = tableId
+      } else {
+        payload.tableId = tableId
+      }
     }
     delete payload._id
     delete payload._rev
@@ -73,12 +130,10 @@ const duplicateRowHandler = async (action, context) => {
       if (!notificationOverride) {
         notificationStore.actions.success("Row saved")
       }
-
       // Refresh related datasources
       await dataSourceStore.actions.invalidateDataSource(tableId, {
         invalidateRelationships: true,
       })
-
       return { row }
     } catch (error) {
       // Abort next actions
@@ -92,7 +147,7 @@ const fetchRowHandler = async action => {
 
   if (tableId && rowId) {
     try {
-      const row = await API.fetchRow({ tableId, rowId })
+      const row = await API.fetchRow(tableId, rowId)
 
       return { row }
     } catch (error) {
@@ -137,7 +192,7 @@ const deleteRowHandler = async action => {
         return false
       }
 
-      const resp = await API.deleteRows({ tableId, rows: requestConfig })
+      const resp = await API.deleteRows(tableId, requestConfig)
 
       if (!notificationOverride) {
         notificationStore.actions.success(
@@ -160,59 +215,50 @@ const deleteRowHandler = async action => {
 
 const triggerAutomationHandler = async action => {
   const { fields, notificationOverride, timeout } = action.parameters
-  if (fields) {
-    try {
-      const result = await API.triggerAutomation({
-        automationId: action.parameters.automationId,
-        fields,
-        timeout,
-      })
+  try {
+    const result = await API.triggerAutomation({
+      automationId: action.parameters.automationId,
+      fields,
+      timeout,
+    })
 
-      // Value will exist if automation is synchronous, so return it.
-      if (result.value) {
-        if (!notificationOverride) {
-          notificationStore.actions.success("Automation ran successfully")
-        }
-        return { result }
-      }
-
+    // Value will exist if automation is synchronous, so return it.
+    if (result.value) {
       if (!notificationOverride) {
-        notificationStore.actions.success("Automation triggered")
+        notificationStore.actions.success("Automation ran successfully")
       }
-    } catch (error) {
-      // Abort next actions
-      return false
+      return { result }
     }
+
+    if (!notificationOverride) {
+      notificationStore.actions.success("Automation triggered")
+    }
+  } catch (error) {
+    // Abort next actions
+    return false
   }
 }
 const navigationHandler = action => {
-  const { url, peek, externalNewTab } = action.parameters
-  routeStore.actions.navigate(url, peek, externalNewTab)
-}
+  let { url, peek, externalNewTab, type } = action.parameters
 
-const scrollHandler = async (action, context) => {
-  return await executeActionHandler(
-    context,
-    action.parameters.componentId,
-    ActionTypes.ScrollTo,
-    {
-      field: action.parameters.field,
-    }
-  )
+  // Ensure in-app navigation starts with a slash
+  if (type === "screen" && url && !url.startsWith("/")) {
+    url = `/${url}`
+  }
+
+  routeStore.actions.navigate(url, peek, externalNewTab)
+  closeSidePanelHandler()
 }
 
 const queryExecutionHandler = async action => {
-  const { datasourceId, queryId, queryParams, notificationOverride } =
-    action.parameters
+  const { queryId, queryParams, notificationOverride } = action.parameters
   try {
     const query = await API.fetchQueryDefinition(queryId)
     if (query?.datasourceId == null) {
       notificationStore.actions.error("That query couldn't be found")
       return false
     }
-    const result = await API.executeQuery({
-      datasourceId,
-      queryId,
+    const result = await API.executeQuery(queryId, {
       parameters: queryParams,
     })
 
@@ -236,47 +282,6 @@ const queryExecutionHandler = async action => {
   }
 }
 
-const executeActionHandler = async (
-  context,
-  componentId,
-  actionType,
-  params
-) => {
-  const fn = context[`${componentId}_${actionType}`]
-  if (fn) {
-    return await fn(params)
-  }
-}
-
-const updateFieldValueHandler = async (action, context) => {
-  return await executeActionHandler(
-    context,
-    action.parameters.componentId,
-    ActionTypes.UpdateFieldValue,
-    {
-      type: action.parameters.type,
-      field: action.parameters.field,
-      value: action.parameters.value,
-    }
-  )
-}
-
-const validateFormHandler = async (action, context) => {
-  return await executeActionHandler(
-    context,
-    action.parameters.componentId,
-    ActionTypes.ValidateForm
-  )
-}
-
-const refreshDataProviderHandler = async (action, context) => {
-  return await executeActionHandler(
-    context,
-    action.parameters.componentId,
-    ActionTypes.RefreshDatasource
-  )
-}
-
 const logoutHandler = async action => {
   await authStore.actions.logOut()
   let redirectUrl = "/builder/auth/login"
@@ -291,23 +296,6 @@ const logoutHandler = async action => {
   if (internal) {
     window.location.reload()
   }
-}
-
-const clearFormHandler = async (action, context) => {
-  return await executeActionHandler(
-    context,
-    action.parameters.componentId,
-    ActionTypes.ClearForm
-  )
-}
-
-const changeFormStepHandler = async (action, context) => {
-  return await executeActionHandler(
-    context,
-    action.parameters.componentId,
-    ActionTypes.ChangeFormStep,
-    action.parameters
-  )
 }
 
 const closeScreenModalHandler = action => {
@@ -349,24 +337,57 @@ const s3UploadHandler = async action => {
   }
 }
 
+/**
+ * For new configs, "rows" is defined and enriched to be the array of rows to
+ * export. For old configs it will be undefined and we need to use the legacy
+ * row selection store in combination with the tableComponentId parameter.
+ */
 const exportDataHandler = async action => {
-  let selection = rowSelectionStore.actions.getSelection(
-    action.parameters.tableComponentId
-  )
-  if (selection.selectedRows && selection.selectedRows.length > 0) {
+  let { tableComponentId, rows, type, columns, delimiter, customHeaders } =
+    action.parameters
+  let tableId
+
+  // Handle legacy configs using the row selection store
+  if (!rows?.length) {
+    const selection = rowSelectionStore.actions.getSelection(tableComponentId)
+    if (selection?.selectedRows?.length) {
+      rows = selection.selectedRows
+      tableId = selection.tableId
+    }
+  }
+
+  // Get table ID from first row if needed
+  if (!tableId) {
+    tableId = rows?.[0]?.tableId
+  }
+
+  // Handle no rows selected
+  if (!rows?.length) {
+    notificationStore.actions.error("Please select at least one row")
+  }
+  // Handle case where we're not using a DS+
+  else if (!tableId) {
+    notificationStore.actions.error(
+      "You can only export data from table datasources"
+    )
+  }
+  // Happy path when we have both rows and table ID
+  else {
     try {
-      const data = await API.exportRows({
-        tableId: selection.tableId,
-        rows: selection.selectedRows,
-        format: action.parameters.type,
-        columns: action.parameters.columns,
+      // Flatten rows if required
+      if (typeof rows[0] !== "string") {
+        rows = rows.map(row => row._id)
+      }
+      const data = await API.exportRows(tableId, type, {
+        rows,
+        columns: columns?.map(column => column.name || column),
+        delimiter,
+        customHeaders,
       })
-      download(data, `${selection.tableId}.${action.parameters.type}`)
+      download(new Blob([data], { type: "text/plain" }), `${tableId}.${type}`)
     } catch (error) {
       notificationStore.actions.error("There was an error exporting the data")
     }
-  } else {
-    notificationStore.actions.error("Please select at least one row")
   }
 }
 
@@ -391,24 +412,84 @@ const continueIfHandler = action => {
 }
 
 const showNotificationHandler = action => {
-  const { message, type, autoDismiss } = action.parameters
+  const { message, type, autoDismiss, duration } = action.parameters
   if (!message || !type) {
     return
   }
-  notificationStore.actions[type]?.(message, autoDismiss)
+  notificationStore.actions[type]?.(message, autoDismiss, duration)
 }
 
 const promptUserHandler = () => {}
 
-const OpenSidePanelHandler = action => {
+const openSidePanelHandler = action => {
   const { id } = action.parameters
   if (id) {
     sidePanelStore.actions.open(id)
   }
 }
 
-const CloseSidePanelHandler = () => {
+const closeSidePanelHandler = () => {
   sidePanelStore.actions.close()
+}
+
+const openModalHandler = action => {
+  const { id } = action.parameters
+  if (id) {
+    modalStore.actions.open(id)
+  }
+}
+
+const closeModalHandler = () => {
+  modalStore.actions.close()
+}
+
+const downloadFileHandler = async action => {
+  const { url, fileName } = action.parameters
+  try {
+    const { type } = action.parameters
+    if (type === "attachment") {
+      const { tableId, rowId, attachmentColumn } = action.parameters
+      const res = await API.downloadAttachment(tableId, rowId, attachmentColumn)
+      await downloadStream(res)
+      return
+    }
+
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      notificationStore.actions.error(
+        `Failed to download from '${url}'. Server returned status code: ${response.status}`
+      )
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(await response.blob())
+
+    const link = document.createElement("a")
+    link.href = objectUrl
+    link.download = fileName
+    link.click()
+
+    URL.revokeObjectURL(objectUrl)
+  } catch (e) {
+    console.error(e)
+    if (e.status) {
+      notificationStore.actions.error(
+        `Failed to download from '${url}'. Server returned status code: ${e.status}`
+      )
+    } else {
+      notificationStore.actions.error(`Failed to download from '${url}'.`)
+    }
+  }
+}
+
+const rowActionHandler = async action => {
+  const { resourceId, rowId, rowActionId } = action.parameters
+  await API.rowActions.trigger(resourceId, rowActionId, rowId)
+  // Refresh related datasources
+  await dataSourceStore.actions.invalidateDataSource(resourceId, {
+    invalidateRelationships: true,
+  })
 }
 
 const handlerMap = {
@@ -417,24 +498,22 @@ const handlerMap = {
   ["Duplicate Row"]: duplicateRowHandler,
   ["Delete Row"]: deleteRowHandler,
   ["Navigate To"]: navigationHandler,
-  ["Scroll To Field"]: scrollHandler,
   ["Execute Query"]: queryExecutionHandler,
   ["Trigger Automation"]: triggerAutomationHandler,
-  ["Validate Form"]: validateFormHandler,
-  ["Update Field Value"]: updateFieldValueHandler,
-  ["Refresh Data Provider"]: refreshDataProviderHandler,
   ["Log Out"]: logoutHandler,
-  ["Clear Form"]: clearFormHandler,
   ["Close Screen Modal"]: closeScreenModalHandler,
-  ["Change Form Step"]: changeFormStepHandler,
   ["Update State"]: updateStateHandler,
   ["Upload File to S3"]: s3UploadHandler,
   ["Export Data"]: exportDataHandler,
   ["Continue if / Stop if"]: continueIfHandler,
   ["Show Notification"]: showNotificationHandler,
   ["Prompt User"]: promptUserHandler,
-  ["Open Side Panel"]: OpenSidePanelHandler,
-  ["Close Side Panel"]: CloseSidePanelHandler,
+  ["Open Side Panel"]: openSidePanelHandler,
+  ["Close Side Panel"]: closeSidePanelHandler,
+  ["Open Modal"]: openModalHandler,
+  ["Close Modal"]: closeModalHandler,
+  ["Download File"]: downloadFileHandler,
+  ["Row Action"]: rowActionHandler,
 }
 
 const confirmTextMap = {
@@ -443,6 +522,7 @@ const confirmTextMap = {
   ["Execute Query"]: "Are you sure you want to execute this query?",
   ["Trigger Automation"]: "Are you sure you want to trigger this automation?",
   ["Prompt User"]: "Are you sure you want to continue?",
+  ["Duplicate Row"]: "Are you sure you want to duplicate this row?",
 }
 
 /**
@@ -461,7 +541,12 @@ export const enrichButtonActions = (actions, context) => {
     return actions
   }
 
-  const handlers = actions.map(def => handlerMap[def["##eventHandlerType"]])
+  // Get handlers for each action. If no bespoke handler is configured, fall
+  // back to simply executing this action from context.
+  const handlers = actions.map(def => {
+    return handlerMap[def["##eventHandlerType"]] || contextActionHandler
+  })
+
   return async eventContext => {
     // Button context is built up as actions are executed.
     // Inherit any previous button context which may have come from actions
@@ -498,6 +583,11 @@ export const enrichButtonActions = (actions, context) => {
             const defaultTitleText = action["##eventHandlerType"]
             const customTitleText =
               action.parameters?.customTitleText || defaultTitleText
+            const cancelButtonText =
+              action.parameters?.cancelButtonText || "Cancel"
+            const confirmButtonText =
+              action.parameters?.confirmButtonText || "Confirm"
+
             confirmationStore.actions.showConfirmation(
               customTitleText,
               confirmText,
@@ -506,23 +596,31 @@ export const enrichButtonActions = (actions, context) => {
                 // then execute the rest of the actions in the chain
                 const result = await callback()
                 if (result !== false) {
-                  // Generate a new total context to pass into the next enrichment
+                  // Generate a new total context for the next enrichment
                   buttonContext.push(result)
                   const newContext = { ...context, actions: buttonContext }
 
-                  // Enrich and call the next button action if there is more than one action remaining
+                  // Enrich and call the next button action if there is more
+                  // than one action remaining
                   const next = enrichButtonActions(
                     actions.slice(i + 1),
                     newContext
                   )
-                  resolve(typeof next === "function" ? await next() : true)
+                  if (typeof next === "function") {
+                    // Pass the event context back into the new action chain
+                    resolve(await next(eventContext))
+                  } else {
+                    resolve(true)
+                  }
                 } else {
                   resolve(false)
                 }
               },
               () => {
                 resolve(false)
-              }
+              },
+              confirmButtonText,
+              cancelButtonText
             )
           })
         }

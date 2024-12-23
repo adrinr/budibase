@@ -1,25 +1,39 @@
 <script>
-  import { tables } from "stores/backend"
+  import { tables } from "stores/builder"
   import { API } from "api"
   import { Select, Label, Multiselect } from "@budibase/bbui"
-  import { capitalise } from "../../helpers"
+  import { capitalise } from "helpers"
   import { createEventDispatcher } from "svelte"
 
   export let schema
-  export let linkedRows = []
+  export let linkedData
   export let useLabel = true
+  export let linkedTableId
+  export let label
   const dispatch = createEventDispatcher()
 
   let rows = []
   let linkedIds = []
 
-  $: linkedIds = (Array.isArray(linkedRows) ? linkedRows : [])?.map(
-    row => row?._id || row
-  )
-  $: label = capitalise(schema.name)
-  $: linkedTableId = schema.tableId
+  $: fieldValue = getFieldValue(linkedData, schema)
+  $: label = label || capitalise(schema.name)
+  $: linkedTableId = linkedTableId || schema.tableId
   $: linkedTable = $tables.list.find(table => table._id === linkedTableId)
   $: fetchRows(linkedTableId)
+
+  const getFieldValue = val => {
+    const linkedIds = (Array.isArray(val) ? val : [])?.map(
+      row => row?._id || row
+    )
+    if (
+      schema.relationshipType === "one-to-many" ||
+      schema.type === "bb_reference_single"
+    ) {
+      return linkedIds[0]
+    } else {
+      return linkedIds
+    }
+  }
 
   async function fetchRows(linkedTableId) {
     try {
@@ -41,9 +55,9 @@
     <b>{linkedTable.name}</b>
     table.
   </Label>
-{:else if schema.relationshipType === "one-to-many"}
+{:else if schema.relationshipType === "one-to-many" || schema.type === "bb_reference_single"}
   <Select
-    value={linkedIds?.[0]}
+    value={fieldValue}
     options={rows}
     getOptionLabel={getPrettyName}
     getOptionValue={row => row._id}
@@ -56,12 +70,12 @@
   />
 {:else}
   <Multiselect
-    bind:value={linkedIds}
-    {label}
+    value={fieldValue}
+    label={useLabel ? label : null}
     options={rows}
     getOptionLabel={getPrettyName}
     getOptionValue={row => row._id}
     sort
-    on:change={() => dispatch("change", linkedIds)}
+    on:change
   />
 {/if}

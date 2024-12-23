@@ -16,6 +16,7 @@
     <Heading size="XS">{heading}</Heading>
   </div>
 {/if}
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <ul class="spectrum-Menu" role="listbox">
   {#each dataSet as data}
     <li
@@ -28,7 +29,7 @@
       on:click={() => onSelect(data)}
     >
       <span class="spectrum-Menu-itemLabel">
-        {data.label}
+        {data.datasourceName ? `${data.datasourceName} - ` : ""}{data.label}
       </span>
       <svg
         class="spectrum-Icon spectrum-UIIcon-Checkmark100 spectrum-Menu-checkmark spectrum-Menu-itemIcon"

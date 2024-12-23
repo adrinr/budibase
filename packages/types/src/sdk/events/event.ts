@@ -33,6 +33,10 @@ export enum Event {
   EMAIL_SMTP_CREATED = "email:smtp:created",
   EMAIL_SMTP_UPDATED = "email:smtp:updated",
 
+  // AI
+  AI_CONFIG_CREATED = "ai:config:created",
+  AI_CONFIG_UPDATED = "ai:config:updated",
+
   // AUTH
   AUTH_SSO_CREATED = "auth:sso:created",
   AUTH_SSO_UPDATED = "auth:sso:updated",
@@ -60,6 +64,7 @@ export enum Event {
   APP_CREATED = "app:created",
   APP_UPDATED = "app:updated",
   APP_DELETED = "app:deleted",
+  APP_DUPLICATED = "app:duplicated",
   APP_PUBLISHED = "app:published",
   APP_UNPUBLISHED = "app:unpublished",
   APP_TEMPLATE_IMPORTED = "app:template:imported",
@@ -113,6 +118,7 @@ export enum Event {
   VIEW_CALCULATION_CREATED = "view:calculation:created",
   VIEW_CALCULATION_UPDATED = "view:calculation:updated",
   VIEW_CALCULATION_DELETED = "view:calculation:deleted",
+  VIEW_JOIN_CREATED = "view:join:created",
 
   // ROWS
   ROWS_CREATED = "rows:created",
@@ -187,6 +193,9 @@ export enum Event {
   // AUDIT LOG
   AUDIT_LOGS_FILTERED = "audit_log:filtered",
   AUDIT_LOGS_DOWNLOADED = "audit_log:downloaded",
+
+  // ROW ACTION
+  ROW_ACTION_CREATED = "row_action:created",
 }
 
 export const UserGroupSyncEvents: Event[] = [
@@ -242,6 +251,10 @@ export const AuditedEventFriendlyName: Record<Event, string | undefined> = {
   [Event.EMAIL_SMTP_CREATED]: `Email configuration created`,
   [Event.EMAIL_SMTP_UPDATED]: `Email configuration updated`,
 
+  // AI
+  [Event.AI_CONFIG_CREATED]: `AI configuration created`,
+  [Event.AI_CONFIG_UPDATED]: `AI configuration updated`,
+
   // AUTH
   [Event.AUTH_SSO_CREATED]: `SSO configuration created`,
   [Event.AUTH_SSO_UPDATED]: `SSO configuration updated`,
@@ -259,6 +272,7 @@ export const AuditedEventFriendlyName: Record<Event, string | undefined> = {
   [Event.APP_CREATED]: `App "{{ name }}" created`,
   [Event.APP_UPDATED]: `App "{{ name }}" updated`,
   [Event.APP_DELETED]: `App "{{ name }}" deleted`,
+  [Event.APP_DUPLICATED]: `App "{{ name }}" duplicated`,
   [Event.APP_PUBLISHED]: `App "{{ name }}" published`,
   [Event.APP_UNPUBLISHED]: `App "{{ name }}" unpublished`,
   [Event.APP_TEMPLATE_IMPORTED]: `App "{{ name }}" template imported`,
@@ -366,6 +380,7 @@ export const AuditedEventFriendlyName: Record<Event, string | undefined> = {
   [Event.VIEW_CALCULATION_CREATED]: undefined,
   [Event.VIEW_CALCULATION_UPDATED]: undefined,
   [Event.VIEW_CALCULATION_DELETED]: undefined,
+  [Event.VIEW_JOIN_CREATED]: undefined,
 
   // SERVED - NOT AUDITED
   [Event.SERVED_BUILDER]: undefined,
@@ -385,6 +400,9 @@ export const AuditedEventFriendlyName: Record<Event, string | undefined> = {
   // AUDIT LOG - NOT AUDITED
   [Event.AUDIT_LOGS_FILTERED]: undefined,
   [Event.AUDIT_LOGS_DOWNLOADED]: undefined,
+
+  // ROW ACTIONS - NOT AUDITED
+  [Event.ROW_ACTION_CREATED]: undefined,
 }
 
 // properties added at the final stage of the event pipeline

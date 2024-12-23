@@ -13,19 +13,25 @@
   export let options = []
   export let getOptionLabel = option => extractProperty(option, "label")
   export let getOptionValue = option => extractProperty(option, "value")
+  export let getOptionSubtitle = option => option?.subtitle
   export let getOptionIcon = option => option?.icon
-  export let useOptionIconImage = false
   export let getOptionColour = option => option?.colour
-  export let isOptionEnabled
+  export let useOptionIconImage = false
+  export let isOptionEnabled = undefined
   export let quiet = false
   export let autoWidth = false
   export let sort = false
   export let tooltip = ""
   export let autocomplete = false
-  export let customPopoverHeight
-  export let align
+  export let customPopoverHeight = undefined
+  export let align = undefined
   export let footer = null
   export let tag = null
+  export let helpText = null
+  export let compare = undefined
+  export let onOptionMouseenter = () => {}
+  export let onOptionMouseleave = () => {}
+
   const dispatch = createEventDispatcher()
   const onChange = e => {
     value = e.detail
@@ -40,7 +46,7 @@
   }
 </script>
 
-<Field {label} {labelPosition} {error} {tooltip}>
+<Field {helpText} {label} {labelPosition} {error} {tooltip}>
   <Select
     {quiet}
     {error}
@@ -57,11 +63,15 @@
     {getOptionValue}
     {getOptionIcon}
     {getOptionColour}
+    {getOptionSubtitle}
     {useOptionIconImage}
     {isOptionEnabled}
     {autocomplete}
     {customPopoverHeight}
     {tag}
+    {compare}
+    {onOptionMouseenter}
+    {onOptionMouseleave}
     on:change={onChange}
     on:click
   />

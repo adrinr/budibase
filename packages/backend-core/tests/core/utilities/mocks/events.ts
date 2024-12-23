@@ -15,6 +15,7 @@ beforeAll(async () => {
 
   jest.spyOn(events.app, "created")
   jest.spyOn(events.app, "updated")
+  jest.spyOn(events.app, "duplicated")
   jest.spyOn(events.app, "deleted")
   jest.spyOn(events.app, "published")
   jest.spyOn(events.app, "unpublished")
@@ -116,6 +117,7 @@ beforeAll(async () => {
   jest.spyOn(events.view, "calculationCreated")
   jest.spyOn(events.view, "calculationUpdated")
   jest.spyOn(events.view, "calculationDeleted")
+  jest.spyOn(events.view, "viewJoinCreated")
 
   jest.spyOn(events.plugin, "init")
   jest.spyOn(events.plugin, "imported")

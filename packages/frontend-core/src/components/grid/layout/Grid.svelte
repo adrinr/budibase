@@ -1,37 +1,31 @@
 <script>
   import { setContext, onMount } from "svelte"
-  import { writable } from "svelte/store"
+  import { writable, derived } from "svelte/store"
   import { fade } from "svelte/transition"
   import { clickOutside, ProgressCircle } from "@budibase/bbui"
   import { createEventManagers } from "../lib/events"
   import { createAPIClient } from "../../../api"
   import { attachStores } from "../stores"
   import BulkDeleteHandler from "../controls/BulkDeleteHandler.svelte"
+  import BulkDuplicationHandler from "../controls/BulkDuplicationHandler.svelte"
+  import ClipboardHandler from "../controls/ClipboardHandler.svelte"
   import GridBody from "./GridBody.svelte"
   import ResizeOverlay from "../overlays/ResizeOverlay.svelte"
   import ReorderOverlay from "../overlays/ReorderOverlay.svelte"
+  import PopoverOverlay from "../overlays/PopoverOverlay.svelte"
   import HeaderRow from "./HeaderRow.svelte"
   import ScrollOverlay from "../overlays/ScrollOverlay.svelte"
   import MenuOverlay from "../overlays/MenuOverlay.svelte"
   import StickyColumn from "./StickyColumn.svelte"
   import UserAvatars from "./UserAvatars.svelte"
   import KeyboardManager from "../overlays/KeyboardManager.svelte"
-  import SortButton from "../controls/SortButton.svelte"
-  import HideColumnsButton from "../controls/HideColumnsButton.svelte"
-  import SizeButton from "../controls/SizeButton.svelte"
   import NewRow from "./NewRow.svelte"
   import { createGridWebsocket } from "../lib/websocket"
-  import {
-    MaxCellRenderHeight,
-    MaxCellRenderWidthOverflow,
-    GutterWidth,
-    DefaultRowHeight,
-  } from "../lib/constants"
+  import * as Constants from "../lib/constants"
 
   export let API = null
   export let datasource = null
   export let schemaOverrides = null
-  export let columnWhitelist = null
   export let canAddRows = true
   export let canExpandRows = true
   export let canEditRows = true
@@ -39,9 +33,9 @@
   export let canEditColumns = true
   export let canSaveSchema = true
   export let stripeRows = false
+  export let quiet = false
   export let collaboration = true
   export let showAvatars = true
-  export let showControls = true
   export let initialFilter = null
   export let initialSortColumn = null
   export let initialSortOrder = null
@@ -49,9 +43,15 @@
   export let notifySuccess = null
   export let notifyError = null
   export let buttons = null
+  export let buttonsCollapsed = false
+  export let buttonsCollapsedText = null
+  export let darkMode = false
+  export let isCloud = null
+  export let rowConditions = null
+  export let aiEnabled = false
 
   // Unique identifier for DOM nodes inside this instance
-  const rand = Math.random()
+  const gridID = `grid-${Math.random().toString().slice(2)}`
 
   // Store props in a store for reference in other stores
   const props = writable($$props)
@@ -59,7 +59,8 @@
   // Build up context
   let context = {
     API: API || createAPIClient(),
-    rand,
+    Constants,
+    gridID,
     props,
   }
   context = { ...context, ...createEventManagers() }
@@ -83,7 +84,6 @@
   $: props.set({
     datasource,
     schemaOverrides,
-    columnWhitelist,
     canAddRows,
     canExpandRows,
     canEditRows,
@@ -91,9 +91,9 @@
     canEditColumns,
     canSaveSchema,
     stripeRows,
+    quiet,
     collaboration,
     showAvatars,
-    showControls,
     initialFilter,
     initialSortColumn,
     initialSortOrder,
@@ -101,7 +101,25 @@
     notifySuccess,
     notifyError,
     buttons,
+    buttonsCollapsed,
+    buttonsCollapsedText,
+    darkMode,
+    isCloud,
+    aiEnabled,
+    rowConditions,
   })
+
+  // Derive min height and make available in context
+  const minHeight = derived(rowHeight, $height => {
+    const heightForControls = $$slots.controls ? Constants.ControlsHeight : 0
+    return (
+      Constants.VPadding +
+      Constants.SmallRowHeight +
+      $height +
+      heightForControls
+    )
+  })
+  context = { ...context, minHeight }
 
   // Set context for children to consume
   setContext("grid", context)
@@ -117,26 +135,25 @@
   })
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="grid"
-  id="grid-{rand}"
+  id={gridID}
   class:is-resizing={$isResizing}
   class:is-reordering={$isReordering}
   class:stripe={stripeRows}
+  class:quiet
   on:mouseenter={() => gridFocused.set(true)}
   on:mouseleave={() => gridFocused.set(false)}
-  style="--row-height:{$rowHeight}px; --default-row-height:{DefaultRowHeight}px; --gutter-width:{GutterWidth}px; --max-cell-render-height:{MaxCellRenderHeight}px; --max-cell-render-width-overflow:{MaxCellRenderWidthOverflow}px; --content-lines:{$contentLines};"
+  style="--row-height:{$rowHeight}px; --default-row-height:{Constants.DefaultRowHeight}px; --gutter-width:{Constants.GutterWidth}px; --max-cell-render-overflow:{Constants.MaxCellRenderOverflow}px; --content-lines:{$contentLines}; --min-height:{$minHeight}px; --controls-height:{Constants.ControlsHeight}px; --scroll-bar-size:{Constants.ScrollBarSize}px;"
 >
-  {#if showControls}
+  {#if $$slots.controls}
     <div class="controls">
       <div class="controls-left">
-        <slot name="filter" />
-        <SortButton />
-        <HideColumnsButton />
-        <SizeButton />
         <slot name="controls" />
       </div>
       <div class="controls-right">
+        <slot name="controls-right" />
         {#if showAvatars}
           <UserAvatars />
         {/if}
@@ -177,6 +194,7 @@
           <ReorderOverlay />
           <ScrollOverlay />
           <MenuOverlay />
+          <PopoverOverlay />
         </div>
       </div>
     </div>
@@ -186,10 +204,13 @@
       <ProgressCircle />
     </div>
   {/if}
-  {#if $config.canDeleteRows}
-    <BulkDeleteHandler />
+  {#if $config.canAddRows}
+    <BulkDuplicationHandler />
   {/if}
+  <BulkDeleteHandler />
+  <ClipboardHandler />
   <KeyboardManager />
+  <slot />
 </div>
 
 <style>
@@ -206,7 +227,7 @@
     --cell-spacing: 4px;
     --cell-border: 1px solid var(--spectrum-global-color-gray-200);
     --cell-font-size: 14px;
-    --controls-height: 50px;
+    --cell-font-color: var(--spectrum-global-color-gray-800);
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
@@ -215,6 +236,7 @@
     position: relative;
     overflow: hidden;
     background: var(--grid-background);
+    min-height: var(--min-height);
   }
   .grid,
   .grid :global(*) {
@@ -261,7 +283,7 @@
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid var(--spectrum-global-color-gray-200);
+    border-bottom: var(--border-light);
     padding: var(--cell-padding);
     gap: var(--cell-spacing);
     background: var(--grid-background-alt);
@@ -301,7 +323,7 @@
     width: 100%;
     height: 100%;
     background: var(--grid-background-alt);
-    opacity: 0.6;
+    opacity: 0.3;
   }
 
   /* Error */
@@ -329,5 +351,15 @@
   .grid-data-outer :global(.spectrum-Checkbox-checkmark),
   .grid-data-outer :global(.spectrum-Checkbox-partialCheckmark) {
     transition: none;
+  }
+
+  /* Overrides for quiet */
+  .grid.quiet :global(.grid-data-content .row > .cell:not(:last-child)),
+  .grid.quiet :global(.sticky-column .row > .cell),
+  .grid.quiet :global(.new-row .row > .cell:not(:last-child)) {
+    border-right: none;
+  }
+  .grid.quiet :global(.sticky-column:before) {
+    display: none;
   }
 </style>

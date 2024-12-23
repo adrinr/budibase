@@ -1,21 +1,17 @@
 <script>
   import { Multiselect } from "@budibase/bbui"
-  import {
-    getDatasourceForProvider,
-    getSchemaForDatasource,
-  } from "builderStore/dataBinding"
-  import { currentAsset } from "builderStore"
-  import { tables } from "stores/backend"
+  import { search } from "@budibase/frontend-core"
+  import { getDatasourceForProvider, getSchemaForDatasource } from "dataBinding"
+  import { selectedScreen, tables } from "stores/builder"
   import { createEventDispatcher } from "svelte"
-  import { getFields } from "helpers/searchFields"
 
   export let componentInstance = {}
   export let value = ""
   export let placeholder
 
   const dispatch = createEventDispatcher()
-  $: datasource = getDatasourceForProvider($currentAsset, componentInstance)
-  $: schema = getSchemaForDatasource($currentAsset, datasource).schema
+  $: datasource = getDatasourceForProvider($selectedScreen, componentInstance)
+  $: schema = getSchemaForDatasource($selectedScreen, datasource).schema
   $: options = getOptions(datasource, schema || {})
   $: boundValue = getSelectedOption(value, options)
 
@@ -24,10 +20,9 @@
     if (!ds?.tableId) {
       return base.map(field => field.name)
     }
-    const currentTable = $tables.list.find(table => table._id === ds.tableId)
-    return getFields(base, { allowLinks: currentTable?.sql }).map(
-      field => field.name
-    )
+    return search
+      .getFields($tables.list, base, { allowLinks: true })
+      .map(field => field.name)
   }
 
   function getSelectedOption(selectedOptions, allOptions) {

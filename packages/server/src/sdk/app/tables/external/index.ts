@@ -1,20 +1,24 @@
 import {
+  FieldType,
   Operation,
   RelationshipType,
   RenameColumn,
   Table,
   TableRequest,
   ViewV2,
+  AutoFieldSubType,
 } from "@budibase/types"
-import { context } from "@budibase/backend-core"
-import { buildExternalTableId } from "../../../../integrations/utils"
+import { context, HTTPError } from "@budibase/backend-core"
+import {
+  breakExternalTableId,
+  buildExternalTableId,
+} from "../../../../integrations/utils"
 import {
   foreignKeyStructure,
   hasTypeChanged,
   setStaticSchemas,
 } from "../../../../api/controllers/table/utils"
 import { cloneDeep } from "lodash/fp"
-import { FieldTypes } from "../../../../constants"
 import { makeTableRequest } from "../../../../api/controllers/table/ExternalRequest"
 import {
   isRelationshipSetup,
@@ -28,6 +32,91 @@ import { getTable } from "../getters"
 import { populateExternalTableSchemas } from "../validation"
 import datasourceSdk from "../../datasources"
 import * as viewSdk from "../../views"
+
+const DEFAULT_PRIMARY_COLUMN = "id"
+
+function noPrimaryKey(table: Table) {
+  return table.primary == null || table.primary.length === 0
+}
+
+function validate(table: Table, oldTable?: Table) {
+  if (
+    !oldTable &&
+    table.schema[DEFAULT_PRIMARY_COLUMN] &&
+    noPrimaryKey(table)
+  ) {
+    throw new Error(
+      "External tables with no `primary` column set will define an `id` column, but we found an `id` column in the supplied schema. Either set a `primary` column or remove the `id` column."
+    )
+  }
+
+  if (hasTypeChanged(table, oldTable)) {
+    throw new Error("A column type has changed.")
+  }
+
+  const autoSubTypes = Object.values(AutoFieldSubType)
+  // check for auto columns, they are not allowed
+  for (let [key, column] of Object.entries(table.schema)) {
+    // this column is a special case, do not validate it
+    if (key === DEFAULT_PRIMARY_COLUMN) {
+      continue
+    }
+    // the auto-column type should never be used
+    if (column.type === FieldType.AUTO) {
+      throw new Error(
+        `Column "${key}" has type "${FieldType.AUTO}" - this is not supported.`
+      )
+    }
+
+    if (
+      column.subtype &&
+      autoSubTypes.includes(column.subtype as AutoFieldSubType)
+    ) {
+      throw new Error(
+        `Column "${key}" has subtype "${column.subtype}" - this is not supported.`
+      )
+    }
+
+    if (column.type === FieldType.DATETIME) {
+      const oldColumn = oldTable?.schema[key] as typeof column
+
+      if (oldColumn && column.timeOnly !== oldColumn.timeOnly) {
+        throw new Error(
+          `Column "${key}" can not change from time to datetime or viceversa.`
+        )
+      }
+    }
+  }
+}
+
+function getDatasourceId(table: Table) {
+  if (!table) {
+    throw new Error("No table supplied")
+  }
+  if (table.sourceId) {
+    return table.sourceId
+  }
+  if (!table._id) {
+    throw new Error("No table ID supplied")
+  }
+  return breakExternalTableId(table._id).datasourceId
+}
+
+export async function create(table: Omit<Table, "_id" | "_rev">) {
+  const datasourceId = getDatasourceId(table)
+
+  const tableToCreate = { ...table, created: true }
+  try {
+    const result = await save(datasourceId!, tableToCreate)
+    return result.table
+  } catch (err: any) {
+    if (err instanceof Error) {
+      throw new HTTPError(err.message, 400)
+    } else {
+      throw new HTTPError(err?.message || err, err.status || 500)
+    }
+  }
+}
 
 export async function save(
   datasourceId: string,
@@ -47,8 +136,16 @@ export async function save(
     oldTable = await getTable(tableId)
   }
 
-  if (hasTypeChanged(tableToSave, oldTable)) {
-    throw new Error("A column type has changed.")
+  // this will throw an error if something is wrong
+  validate(tableToSave, oldTable)
+
+  if (!oldTable && noPrimaryKey(tableToSave)) {
+    tableToSave.primary = [DEFAULT_PRIMARY_COLUMN]
+    tableToSave.schema[DEFAULT_PRIMARY_COLUMN] = {
+      type: FieldType.NUMBER,
+      autocolumn: true,
+      name: DEFAULT_PRIMARY_COLUMN,
+    }
   }
 
   for (let view in tableToSave.views) {
@@ -78,7 +175,7 @@ export async function save(
 
   // check if relations need setup
   for (let schema of Object.values(tableToSave.schema)) {
-    if (schema.type !== FieldTypes.LINK || isRelationshipSetup(schema)) {
+    if (schema.type !== FieldType.LINK || isRelationshipSetup(schema)) {
       continue
     }
     const schemaTableId = schema.tableId
@@ -133,17 +230,21 @@ export async function save(
       }
     }
     generateRelatedSchema(schema, relatedTable, tableToSave, relatedColumnName)
+    tables[relatedTable.name] = relatedTable
     schema.main = true
   }
 
-  cleanupRelationships(tableToSave, tables, oldTable)
+  // add in the new table for relationship purposes
+  tables[tableToSave.name] = tableToSave
+  if (oldTable) {
+    cleanupRelationships(tableToSave, tables, { oldTable })
+  }
 
   const operation = tableId ? Operation.UPDATE_TABLE : Operation.CREATE_TABLE
   await makeTableRequest(
     datasource,
     operation,
     tableToSave,
-    tables,
     oldTable,
     opts?.renaming
   )
@@ -151,7 +252,7 @@ export async function save(
   for (let extraTable of extraTablesToUpdate) {
     const oldExtraTable = oldTables[extraTable.name]
     let op = oldExtraTable ? Operation.UPDATE_TABLE : Operation.CREATE_TABLE
-    await makeTableRequest(datasource, op, extraTable, tables, oldExtraTable)
+    await makeTableRequest(datasource, op, extraTable, oldExtraTable)
   }
 
   // make sure the constrained list, all still exist
@@ -163,15 +264,24 @@ export async function save(
 
   // remove the rename prop
   delete tableToSave._rename
+
+  datasource.entities = {
+    ...datasource.entities,
+    ...tables,
+  }
+
   // store it into couch now for budibase reference
-  datasource.entities[tableToSave.name] = tableToSave
   await db.put(populateExternalTableSchemas(datasource))
 
   // Since tables are stored inside datasources, we need to notify clients
   // that the datasource definition changed
   const updatedDatasource = await datasourceSdk.get(datasource._id!)
 
-  return { datasource: updatedDatasource, table: tableToSave }
+  if (updatedDatasource.isSQL) {
+    tableToSave.sql = true
+  }
+
+  return { datasource: updatedDatasource, table: tableToSave, oldTable }
 }
 
 export async function destroy(datasourceId: string, table: Table) {
@@ -181,8 +291,8 @@ export async function destroy(datasourceId: string, table: Table) {
 
   const operation = Operation.DELETE_TABLE
   if (tables) {
-    await makeTableRequest(datasource, operation, table, tables)
-    cleanupRelationships(table, tables)
+    await makeTableRequest(datasource, operation, table)
+    cleanupRelationships(table, tables, { deleting: true })
     delete tables[table.name]
     datasource.entities = tables
   }

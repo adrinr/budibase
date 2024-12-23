@@ -2,14 +2,15 @@ import fetch from "node-fetch"
 import { getFetchResponse } from "./utils"
 import {
   AutomationActionStepId,
-  AutomationStepSchema,
-  AutomationStepInput,
+  AutomationStepDefinition,
   AutomationStepType,
   AutomationIOType,
   AutomationFeature,
+  ZapierStepInputs,
+  ZapierStepOutputs,
 } from "@budibase/types"
 
-export const definition: AutomationStepSchema = {
+export const definition: AutomationStepDefinition = {
   name: "Zapier Webhook",
   stepId: AutomationActionStepId.zapier,
   type: AutomationStepType.ACTION,
@@ -32,26 +33,6 @@ export const definition: AutomationStepSchema = {
           type: AutomationIOType.JSON,
           title: "Payload",
         },
-        value1: {
-          type: AutomationIOType.STRING,
-          title: "Payload Value 1",
-        },
-        value2: {
-          type: AutomationIOType.STRING,
-          title: "Payload Value 2",
-        },
-        value3: {
-          type: AutomationIOType.STRING,
-          title: "Payload Value 3",
-        },
-        value4: {
-          type: AutomationIOType.STRING,
-          title: "Payload Value 4",
-        },
-        value5: {
-          type: AutomationIOType.STRING,
-          title: "Payload Value 5",
-        },
       },
       required: ["url"],
     },
@@ -70,7 +51,11 @@ export const definition: AutomationStepSchema = {
   },
 }
 
-export async function run({ inputs }: AutomationStepInput) {
+export async function run({
+  inputs,
+}: {
+  inputs: ZapierStepInputs
+}): Promise<ZapierStepOutputs> {
   const { url, body } = inputs
 
   let payload = {}

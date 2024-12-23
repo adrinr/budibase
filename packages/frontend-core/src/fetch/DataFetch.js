@@ -1,10 +1,10 @@
 import { writable, derived, get } from "svelte/store"
 import { cloneDeep } from "lodash/fp"
-import { LuceneUtils } from "../utils"
+import { QueryUtils } from "../utils"
 import { convertJSONSchemaToTableSchema } from "../utils/json"
+import { FieldType, SortOrder, SortType } from "@budibase/types"
 
-const { buildLuceneQuery, luceneLimit, runLuceneQuery, luceneSort } =
-  LuceneUtils
+const { buildQuery, limit: queryLimit, runQuery, sort } = QueryUtils
 
 /**
  * Parent class which handles the implementation of fetching data from an
@@ -38,7 +38,7 @@ export default class DataFetch {
 
       // Sorting config
       sortColumn: null,
-      sortOrder: "ascending",
+      sortOrder: SortOrder.ASCENDING,
       sortType: null,
 
       // Pagination config
@@ -163,24 +163,29 @@ export default class DataFetch {
     // If we don't have a sort column specified then just ensure we don't set
     // any sorting params
     if (!this.options.sortColumn) {
-      this.options.sortOrder = "ascending"
+      this.options.sortOrder = SortOrder.ASCENDING
       this.options.sortType = null
     } else {
       // Otherwise determine what sort type to use base on sort column
-      const type = schema?.[this.options.sortColumn]?.type
-      this.options.sortType =
-        type === "number" || type === "bigint" ? "number" : "string"
-
+      this.options.sortType = SortType.STRING
+      const fieldSchema = schema?.[this.options.sortColumn]
+      if (
+        fieldSchema?.type === FieldType.NUMBER ||
+        fieldSchema?.type === FieldType.BIGINT ||
+        fieldSchema?.calculationType
+      ) {
+        this.options.sortType = SortType.NUMBER
+      }
       // If no sort order, default to ascending
       if (!this.options.sortOrder) {
-        this.options.sortOrder = "ascending"
+        this.options.sortOrder = SortOrder.ASCENDING
       }
     }
 
-    // Build the lucene query
+    // Build the query
     let query = this.options.query
     if (!query) {
-      query = buildLuceneQuery(filter)
+      query = buildQuery(filter)
     }
 
     // Update store
@@ -229,17 +234,17 @@ export default class DataFetch {
 
     // If we don't support searching, do a client search
     if (!this.features.supportsSearch && clientSideSearching) {
-      rows = runLuceneQuery(rows, query)
+      rows = runQuery(rows, query)
     }
 
     // If we don't support sorting, do a client-side sort
     if (!this.features.supportsSort && clientSideSorting) {
-      rows = luceneSort(rows, sortColumn, sortOrder, sortType)
+      rows = sort(rows, sortColumn, sortOrder, sortType)
     }
 
     // If we don't support pagination, do a client-side limit
     if (!this.features.supportsPagination && clientSideLimiting) {
-      rows = luceneLimit(rows, limit)
+      rows = queryLimit(rows, limit)
     }
 
     return {
@@ -311,7 +316,7 @@ export default class DataFetch {
     let jsonAdditions = {}
     Object.keys(schema).forEach(fieldKey => {
       const fieldSchema = schema[fieldKey]
-      if (fieldSchema?.type === "json") {
+      if (fieldSchema?.type === FieldType.JSON) {
         const jsonSchema = convertJSONSchemaToTableSchema(fieldSchema, {
           squashObjects: true,
         })
@@ -348,8 +353,7 @@ export default class DataFetch {
    * Determine the feature flag for this datasource definition
    * @param definition
    */
-  // eslint-disable-next-line no-unused-vars
-  determineFeatureFlags(definition) {
+  determineFeatureFlags(_definition) {
     return {
       supportsSearch: false,
       supportsSort: false,
@@ -366,7 +370,9 @@ export default class DataFetch {
     let refresh = false
     const entries = Object.entries(newOptions || {})
     for (let [key, value] of entries) {
-      if (JSON.stringify(value) !== JSON.stringify(this.options[key])) {
+      const oldVal = this.options[key] == null ? null : this.options[key]
+      const newVal = value == null ? null : value
+      if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
         refresh = true
         break
       }

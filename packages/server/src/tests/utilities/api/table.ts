@@ -1,78 +1,112 @@
 import {
-  MigrateRequest,
-  MigrateResponse,
+  BulkImportRequest,
+  BulkImportResponse,
+  CsvToJsonRequest,
+  CsvToJsonResponse,
+  MigrateTableRequest,
+  MigrateTableResponse,
   SaveTableRequest,
   SaveTableResponse,
   Table,
+  ValidateNewTableImportRequest,
+  ValidateTableImportRequest,
+  ValidateTableImportResponse,
 } from "@budibase/types"
-import TestConfiguration from "../TestConfiguration"
-import { TestAPI } from "./base"
+import { Expectations, TestAPI } from "./base"
 
 export class TableAPI extends TestAPI {
-  constructor(config: TestConfiguration) {
-    super(config)
-  }
-
-  create = async (
+  save = async (
     data: SaveTableRequest,
-    { expectStatus } = { expectStatus: 200 }
+    expectations?: Expectations
   ): Promise<SaveTableResponse> => {
-    const res = await this.request
-      .post(`/api/tables`)
-      .send(data)
-      .set(this.config.defaultHeaders())
-      .expect("Content-Type", /json/)
-
-    if (res.status !== expectStatus) {
-      throw new Error(
-        `Expected status ${expectStatus} but got ${
-          res.status
-        } with body ${JSON.stringify(res.body)}`
-      )
-    }
-
-    return res.body
+    return await this._post<SaveTableResponse>("/api/tables", {
+      body: data,
+      expectations,
+    })
   }
 
-  fetch = async (
-    { expectStatus } = { expectStatus: 200 }
-  ): Promise<Table[]> => {
-    const res = await this.request
-      .get(`/api/tables`)
-      .set(this.config.defaultHeaders())
-      .expect("Content-Type", /json/)
-      .expect(expectStatus)
-    return res.body
+  fetch = async (expectations?: Expectations): Promise<Table[]> => {
+    return await this._get<Table[]>("/api/tables", { expectations })
   }
 
   get = async (
     tableId: string,
-    { expectStatus } = { expectStatus: 200 }
+    expectations?: Expectations
   ): Promise<Table> => {
-    const res = await this.request
-      .get(`/api/tables/${tableId}`)
-      .set(this.config.defaultHeaders())
-      .expect("Content-Type", /json/)
-      .expect(expectStatus)
-    return res.body
+    return await this._get<Table>(`/api/tables/${tableId}`, { expectations })
   }
 
   migrate = async (
     tableId: string,
-    data: MigrateRequest,
-    { expectStatus } = { expectStatus: 200 }
-  ): Promise<MigrateResponse> => {
-    const res = await this.request
-      .post(`/api/tables/${tableId}/migrate`)
-      .send(data)
-      .set(this.config.defaultHeaders())
-    if (res.status !== expectStatus) {
-      throw new Error(
-        `Expected status ${expectStatus} but got ${
-          res.status
-        } with body ${JSON.stringify(res.body)}`
-      )
-    }
-    return res.body
+    data: MigrateTableRequest,
+    expectations?: Expectations
+  ): Promise<MigrateTableResponse> => {
+    return await this._post<MigrateTableResponse>(
+      `/api/tables/${tableId}/migrate`,
+      {
+        body: data,
+        expectations,
+      }
+    )
+  }
+
+  import = async (
+    tableId: string,
+    data: BulkImportRequest,
+    expectations?: Expectations
+  ): Promise<BulkImportResponse> => {
+    return await this._post<BulkImportResponse>(
+      `/api/tables/${tableId}/import`,
+      {
+        body: data,
+        expectations,
+      }
+    )
+  }
+
+  destroy = async (
+    tableId: string,
+    revId: string,
+    expectations?: Expectations
+  ): Promise<void> => {
+    return await this._delete(`/api/tables/${tableId}/${revId}`, {
+      expectations,
+    })
+  }
+
+  validateNewTableImport = async (
+    body: ValidateNewTableImportRequest,
+    expectations?: Expectations
+  ): Promise<ValidateTableImportResponse> => {
+    return await this._post<ValidateTableImportResponse>(
+      `/api/tables/validateNewTableImport`,
+      {
+        body,
+        expectations,
+      }
+    )
+  }
+
+  validateExistingTableImport = async (
+    body: ValidateTableImportRequest,
+    expectations?: Expectations
+  ): Promise<ValidateTableImportResponse> => {
+    return await this._post<ValidateTableImportResponse>(
+      `/api/tables/validateExistingTableImport`,
+      {
+        body,
+        expectations,
+      }
+    )
+  }
+
+  csvToJson = async (
+    body: CsvToJsonRequest,
+    expectations?: Expectations
+  ): Promise<CsvToJsonResponse> => {
+    return await this._post<CsvToJsonResponse>(`/api/convert/csvToJson`, {
+      body,
+      expectations,
+    })
   }
 }

@@ -22,13 +22,15 @@
   export let hoverable = false
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <div
   on:click
   class="spectrum-StatusLight spectrum-StatusLight--size{size}"
   class:custom={!!color}
   class:square
   class:hoverable
-  style={`--color: ${color};`}
+  style={`--color: ${color ?? "var(--spectrum-global-color-gray-400)"};`}
   class:spectrum-StatusLight--celery={celery}
   class:spectrum-StatusLight--yellow={yellow}
   class:spectrum-StatusLight--fuchsia={fuchsia}
@@ -59,13 +61,17 @@
     min-height: 0;
     padding-top: 0;
     padding-bottom: 0;
-    transition: color ease-out 130ms;
   }
   .spectrum-StatusLight.withText::before {
     margin-right: 10px;
   }
+
+  .spectrum-StatusLight::before {
+    transition: background-color ease-out 160ms;
+  }
+
   .custom::before {
-    background: var(--color) !important;
+    background-color: var(--color) !important;
   }
   .square::before {
     width: 14px;
@@ -76,5 +82,15 @@
   .hoverable:hover {
     cursor: pointer;
     color: var(--spectrum-global-color-gray-900);
+  }
+
+  .spectrum-StatusLight--sizeXS::before {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+
+  .spectrum-StatusLight--disabled::before {
+    background-color: var(--spectrum-global-color-gray-400) !important;
   }
 </style>

@@ -85,7 +85,9 @@ async function getImportableDocuments(db: Database) {
   const docPromises = []
   for (let docType of DocumentTypesToImport) {
     docPromises.push(
-      db.allDocs(dbCore.getDocParams(docType, null, { include_docs: true }))
+      db.allDocs<Document>(
+        dbCore.getDocParams(docType, null, { include_docs: true })
+      )
     )
   }
   // map the responses to the document itself
@@ -121,6 +123,7 @@ export async function updateWithExport(
     // don't need obj store, the existing app already has everything we need
     await backups.importApp(devId, tempDb, template, {
       importObjStoreContents: false,
+      updateAttachmentColumns: true,
     })
     const newMetadata = await getNewAppMetadata(tempDb, appDb)
     // get the documents to copy

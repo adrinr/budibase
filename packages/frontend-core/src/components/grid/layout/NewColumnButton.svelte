@@ -1,52 +1,65 @@
 <script>
   import { getContext, onMount } from "svelte"
-  import { Icon, Popover, clickOutside } from "@budibase/bbui"
+  import { Icon } from "@budibase/bbui"
+  import GridPopover from "../overlays/GridPopover.svelte"
 
-  const { visibleColumns, scroll, width, subscribe } = getContext("grid")
+  const {
+    scrollableColumns,
+    scrollLeft,
+    width,
+    subscribe,
+    ui,
+    keyboardBlocked,
+  } = getContext("grid")
 
   let anchor
-  let open = false
+  let isOpen = false
 
-  $: columnsWidth = $visibleColumns.reduce(
+  $: columnsWidth = $scrollableColumns.reduce(
     (total, col) => (total += col.width),
     0
   )
-  $: end = columnsWidth - 1 - $scroll.left
+  $: end = columnsWidth - 1 - $scrollLeft
   $: left = Math.min($width - 40, end)
+  $: keyboardBlocked.set(isOpen)
+
+  const open = () => {
+    ui.actions.blur()
+    isOpen = true
+  }
 
   const close = () => {
-    open = false
+    isOpen = false
   }
 
   onMount(() => subscribe("close-edit-column", close))
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <div
   id="add-column-button"
   bind:this={anchor}
   class="add"
   style="left:{left}px"
-  on:click={() => (open = true)}
+  on:click={open}
 >
   <Icon name="Add" />
 </div>
-<Popover
-  bind:open
-  {anchor}
-  align={$visibleColumns.length ? "right" : "left"}
-  offset={0}
-  popoverTarget={document.getElementById(`add-column-button`)}
-  customZindex={100}
->
-  <div
-    use:clickOutside={() => {
-      open = false
-    }}
-    class="content"
+{#if isOpen}
+  <GridPopover
+    {anchor}
+    align={$scrollableColumns.length ? "right" : "left"}
+    on:close={close}
+    maxHeight={null}
+    resizable
+    minWidth={360}
   >
-    <slot />
-  </div>
-</Popover>
+    <div class="content">
+      <slot />
+    </div>
+  </GridPopover>
+{/if}
 
 <style>
   .add {
@@ -68,7 +81,6 @@
   }
 
   .content {
-    width: 300px;
     padding: 20px;
     display: flex;
     flex-direction: column;

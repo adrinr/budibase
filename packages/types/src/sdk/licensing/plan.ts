@@ -7,9 +7,11 @@ export enum PlanType {
   /** @deprecated */
   PREMIUM = "premium",
   PREMIUM_PLUS = "premium_plus",
+  PREMIUM_PLUS_TRIAL = "premium_plus_trial",
   /** @deprecated */
   BUSINESS = "business",
   ENTERPRISE_BASIC = "enterprise_basic",
+  ENTERPRISE_BASIC_TRIAL = "enterprise_basic_trial",
   ENTERPRISE = "enterprise",
 }
 
@@ -36,7 +38,6 @@ export interface AvailablePrice {
 export enum PlanModel {
   PER_USER = "perUser",
   PER_CREATOR_PER_USER = "per_creator_per_user",
-  DAY_PASS = "dayPass",
 }
 
 export interface PurchasedPlan {
@@ -47,7 +48,6 @@ export interface PurchasedPlan {
 }
 
 export interface PurchasedPrice extends AvailablePrice {
-  dayPasses: number | undefined
   /** @deprecated - now at the plan level via model */
   isPerUser: boolean
 }

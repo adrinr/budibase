@@ -17,7 +17,7 @@
 </script>
 
 <div class="relationship-container">
-  <div class="relationship-part">
+  <div class="relationship-type">
     <Select
       disabled={linkEditDisabled}
       bind:value={relationshipPart1}
@@ -39,7 +39,7 @@
   </div>
 </div>
 <div class="relationship-container">
-  <div class="relationship-part">
+  <div class="relationship-type">
     <Select
       disabled={linkEditDisabled}
       bind:value={relationshipPart2}
@@ -75,10 +75,12 @@
   .relationship-container {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: var(--spacing-m);
   }
-
   .relationship-part {
-    flex-basis: 60%;
+    flex: 1 1 auto;
+  }
+  .relationship-type {
+    flex: 0 0 128px;
   }
 </style>

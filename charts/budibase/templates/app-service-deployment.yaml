@@ -2,12 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
-    kompose.cmd: kompose convert
-    kompose.version: 1.21.0 (992df58d8)
 {{ if .Values.services.apps.deploymentAnnotations }}
 {{- toYaml .Values.services.apps.deploymentAnnotations | indent 4 -}}
 {{ end }}
-  creationTimestamp: null
   labels:
     io.kompose.service: app-service
 {{ if .Values.services.apps.deploymentLabels }}
@@ -24,12 +21,9 @@ spec:
   template:
     metadata:
       annotations:
-        kompose.cmd: kompose convert
-        kompose.version: 1.21.0 (992df58d8)
 {{ if .Values.services.apps.templateAnnotations }}
 {{- toYaml .Values.services.apps.templateAnnotations | indent 8 -}}
 {{ end }}
-      creationTimestamp: null
       labels:
         io.kompose.service: app-service
 {{ if .Values.services.apps.templateLabels }}
@@ -48,6 +42,12 @@ spec:
           {{ else }}
           value: http://{{ .Release.Name }}-svc-couchdb:{{ .Values.services.couchdb.port }}
           {{ end }}
+        - name: COUCH_DB_SQL_URL
+          {{ if .Values.globals.sqs.url }}
+          value: {{ .Values.globals.sqs.url | quote }}
+          {{ else }}
+          value: http://{{ .Release.Name }}-svc-couchdb:{{ .Values.globals.sqs.port }}
+          {{ end }}
         {{ if .Values.services.couchdb.enabled }}
         - name: COUCH_DB_USER
           valueFrom:
@@ -63,7 +63,10 @@ spec:
         - name: ENABLE_ANALYTICS
           value: {{ .Values.globals.enableAnalytics | quote }}
         - name: API_ENCRYPTION_KEY
-          value: {{ .Values.globals.apiEncryptionKey | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "budibase.fullname" . }}
+              key: apiEncryptionKey
         - name: HTTP_LOGGING
           value: {{ .Values.services.apps.httpLogging | quote }}
         - name: INTERNAL_API_KEY
@@ -112,6 +115,8 @@ spec:
           value: {{ .Values.services.objectStore.globalBucketName | quote }}
         - name: BACKUPS_BUCKET_NAME
           value: {{ .Values.services.objectStore.backupsBucketName | quote }}
+        - name: TEMP_BUCKET_NAME
+          value: {{ .Values.globals.tempBucketName | quote }}
         - name: PORT
           value: {{ .Values.services.apps.port | quote }}
         {{ if .Values.services.worker.publicApiRateLimitPerSecond }}
@@ -157,7 +162,10 @@ spec:
         - name: TENANT_FEATURE_FLAGS
           value: {{ .Values.globals.tenantFeatureFlags | quote }}
         - name: ENCRYPTION_KEY
-          value: {{ .Values.globals.bbEncryptionKey | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "budibase.fullname" . }}
+              key: bbEncryptionKey
         {{ if .Values.globals.bbAdminUserEmail }}
         - name: BB_ADMIN_USER_EMAIL
           value: {{ .Values.globals.bbAdminUserEmail | quote }}
@@ -173,6 +181,10 @@ spec:
         {{ if .Values.services.apps.nodeDebug }}
         - name: NODE_DEBUG
           value: {{ .Values.services.apps.nodeDebug | quote }}
+        {{ end }}
+        {{ if .Values.services.apps.xssSafeMode }}
+        - name: XSS_SAFE_MODE
+          value: {{ .Values.services.apps.xssSafeMode | quote }}
         {{ end }}
         {{ if .Values.globals.datadogApmEnabled }}
         - name: DD_LOGS_INJECTION
@@ -198,8 +210,22 @@ spec:
         - name: NODE_TLS_REJECT_UNAUTHORIZED
           value: {{ .Values.services.tlsRejectUnauthorized }}
         {{ end }}
-
-        image: budibase/apps:{{ .Values.globals.appVersion | default .Chart.AppVersion }}
+        {{- if .Values.services.automationWorkers.enabled }}
+        - name: APP_FEATURES
+          value: "api"
+        {{- end }}
+        {{- range .Values.services.apps.extraEnv }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- range .Values.services.apps.extraEnvFromSecret}}
+        - name: {{ .name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .secretName }}
+              key: {{ .secretKey | quote }}
+        {{- end}}
+        image: {{ .Values.globals.dockerRegistry }}budibase/apps:{{ .Values.globals.appVersion | default .Chart.AppVersion }}
         imagePullPolicy: Always
         {{- if .Values.services.apps.startupProbe }}
         {{- with .Values.services.apps.startupProbe }}
@@ -226,6 +252,21 @@ spec:
         resources:
         {{- toYaml . | nindent 10 }}
         {{ end }}
+        {{ if .Values.services.apps.command }}
+        command:
+        {{- toYaml .Values.services.apps.command | nindent 10 }}
+        {{ end }}
+        {{ if .Values.services.apps.args }}
+        args:
+        {{- toYaml .Values.services.apps.args | nindent 10 }}
+        {{ end }}
+        {{ if .Values.services.apps.extraVolumeMounts }}
+        volumeMounts:
+        {{- toYaml .Values.services.apps.extraVolumeMounts | nindent 10 }}
+        {{- end }}
+      {{- if .Values.services.apps.extraContainers }}
+        {{- toYaml .Values.services.apps.extraContainers | nindent 6 }}
+      {{- end }}
     {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
@@ -243,4 +284,14 @@ spec:
       {{ end }}
       restartPolicy: Always
       serviceAccountName: ""
+      {{ if .Values.services.apps.ndots }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: {{ .Values.services.apps.ndots | quote }}
+      {{ end }}
+      {{ if .Values.services.apps.extraVolumes }}
+      volumes:
+      {{- toYaml .Values.services.apps.extraVolumes | nindent 6 }}
+      {{- end }}
 status: {}

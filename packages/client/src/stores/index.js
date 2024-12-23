@@ -27,9 +27,12 @@ export {
   dndIsDragging,
 } from "./dnd"
 export { sidePanelStore } from "./sidePanel"
+export { modalStore } from "./modal"
+export { hoverStore } from "./hover"
 
 // Context stores are layered and duplicated, so it is not a singleton
 export { createContextStore } from "./context"
+export { featuresStore } from "./features"
 
 // Initialises an app by loading screens and routes
 export { initialise } from "./initialise"

@@ -3,11 +3,10 @@
     "name": "Blocks",
     "icon": "Article",
     "children": [
-      "gridblock",
-      "tableblock",
       "cardsblock",
       "repeaterblock",
       "formblock",
+      "multistepformblock",
       "chartblock",
       "rowexplorer"
     ]
@@ -15,7 +14,7 @@
   {
     "name": "Layout",
     "icon": "ClassicGridView",
-    "children": ["container", "section", "grid", "sidepanel"]
+    "children": ["container", "sidepanel", "modal"]
   },
   {
     "name": "Data",
@@ -23,7 +22,7 @@
     "children": [
       "dataprovider",
       "repeater",
-      "table",
+      "gridblock",
       "spreadsheet",
       "dynamicfilter",
       "daterangepicker"
@@ -64,6 +63,7 @@
       "optionsfield",
       "booleanfield",
       "longformfield",
+      "attachmentsinglefield",
       "attachmentfield",
       "jsonfield",
       "relationshipfield",
@@ -71,6 +71,8 @@
       "multifieldselect",
       "s3upload",
       "codescanner",
+      "signaturesinglefield",
+      "bbreferencesinglefield",
       "bbreferencefield"
     ]
   },

@@ -1,21 +1,37 @@
 import fetch from "node-fetch"
 import env from "../../environment"
 import { checkSlashesInUrl } from "../../utilities"
-import { request } from "../../utilities/workerRequests"
+import { createRequest } from "../../utilities/workerRequests"
 import { clearLock as redisClearLock } from "../../utilities/redis"
 import { DocumentType } from "../../db/utils"
-import { context, env as envCore } from "@budibase/backend-core"
-import { events, db as dbCore, cache } from "@budibase/backend-core"
-import { App } from "@budibase/types"
+import {
+  context,
+  env as envCore,
+  events,
+  db as dbCore,
+  cache,
+} from "@budibase/backend-core"
+import {
+  App,
+  ClearDevLockResponse,
+  Ctx,
+  GetVersionResponse,
+  RevertAppResponse,
+} from "@budibase/types"
 
-async function redirect(ctx: any, method: string, path: string = "global") {
+async function redirect(
+  ctx: any,
+  method: "GET" | "POST" | "DELETE",
+  path = "global"
+) {
   const { devPath } = ctx.params
   const queryString = ctx.originalUrl.split("?")[1] || ""
   const response = await fetch(
     checkSlashesInUrl(
       `${env.WORKER_URL}/api/${path}/${devPath}?${queryString}`
     ),
-    request(ctx, {
+    createRequest({
+      ctx,
       method,
       body: ctx.request.body,
     })
@@ -59,7 +75,7 @@ export function buildRedirectDelete(path: string) {
   }
 }
 
-export async function clearLock(ctx: any) {
+export async function clearLock(ctx: Ctx<void, ClearDevLockResponse>) {
   const { appId } = ctx.params
   try {
     await redisClearLock(appId, ctx.user)
@@ -71,7 +87,7 @@ export async function clearLock(ctx: any) {
   }
 }
 
-export async function revert(ctx: any) {
+export async function revert(ctx: Ctx<void, RevertAppResponse>) {
   const { appId } = ctx.params
   const productionAppId = dbCore.getProdAppID(appId)
 
@@ -121,7 +137,7 @@ export async function revert(ctx: any) {
   }
 }
 
-export async function getBudibaseVersion(ctx: any) {
+export async function getBudibaseVersion(ctx: Ctx<void, GetVersionResponse>) {
   const version = envCore.VERSION
   ctx.body = {
     version,

@@ -1,11 +1,9 @@
 {
-  "include": ["src/**/*"],
+  "extends": "../../tsconfig.build.json",
   "compilerOptions": {
-    "allowJs": true,
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "outDir": "dist",
-    "esModuleInterop": true,
-    "types": ["node", "jest"]
-  }
+    "lib": ["dom"],
+    "baseUrl": ".",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"]
 }

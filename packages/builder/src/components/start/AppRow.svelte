@@ -5,12 +5,20 @@
   import { goto } from "@roxi/routify"
   import { UserAvatars } from "@budibase/frontend-core"
   import { sdk } from "@budibase/shared-core"
+  import AppContextMenuModals from "./AppContextMenuModals.svelte"
+  import getAppContextMenuItems from "./getAppContextMenuItems.js"
+  import FavouriteAppButton from "pages/builder/portal/apps/FavouriteAppButton.svelte"
+  import { contextMenuStore } from "stores/builder"
 
   export let app
   export let lockedAction
 
+  let appContextMenuModals
+
+  $: contextMenuOpen = `${app.appId}-index` === $contextMenuStore.id
   $: editing = app.sessions?.length
   $: isBuilder = sdk.users.isBuilder($auth.user, app?.devId)
+  $: unclickable = !isBuilder && !app.deployed
 
   const handleDefaultClick = () => {
     if (!isBuilder) {
@@ -31,11 +39,40 @@
   }
 
   const goToApp = () => {
-    window.open(`/app/${app.name}`, "_blank")
+    if (app.deployed && app.url) {
+      window.open(`/app${app.url}`, "_blank")
+    }
+  }
+
+  const openContextMenu = e => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const items = getAppContextMenuItems({
+      app,
+      onDuplicate: appContextMenuModals?.showDuplicateModal,
+      onExportDev: appContextMenuModals?.showExportDevModal,
+      onExportProd: appContextMenuModals?.showExportProdModal,
+      onDelete: appContextMenuModals?.showDeleteModal,
+    })
+
+    contextMenuStore.open(`${app.appId}-index`, items, {
+      x: e.clientX,
+      y: e.clientY,
+    })
   }
 </script>
 
-<div class="app-row" on:click={lockedAction || handleDefaultClick}>
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<div
+  class:contextMenuOpen
+  class="app-row"
+  class:unclickable
+  class:favourite={app.favourite}
+  on:click={lockedAction || handleDefaultClick}
+  on:contextmenu={openContextMenu}
+>
   <div class="title">
     <div class="app-icon">
       <Icon size="L" name={app.icon?.name || "Apps"} color={app.icon?.color} />
@@ -65,21 +102,33 @@
     <Body size="S">{app.deployed ? "Published" : "Unpublished"}</Body>
   </div>
 
-  {#if isBuilder}
+  <div class="actions-wrap">
     <div class="app-row-actions">
-      <Button size="S" secondary on:click={lockedAction || goToOverview}>
-        Manage
-      </Button>
-      <Button size="S" primary on:click={lockedAction || goToBuilder}>
-        Edit
-      </Button>
+      {#if isBuilder}
+        <div class="row-action">
+          <Button size="S" secondary on:click={lockedAction || goToBuilder}>
+            Edit
+          </Button>
+        </div>
+        <div class="row-action">
+          <Icon
+            on:click={openContextMenu}
+            size="S"
+            hoverable
+            name="MoreSmallList"
+          />
+        </div>
+      {:else}
+        <!-- this can happen if an app builder has app user access to an app -->
+        <Button size="S" secondary>View</Button>
+      {/if}
     </div>
-  {:else}
-    <!-- this can happen if an app builder has app user access to an app -->
-    <div class="app-row-actions">
-      <Button size="S" secondary>View</Button>
+
+    <div class="favourite-icon">
+      <FavouriteAppButton {app} noWrap />
     </div>
-  {/if}
+  </div>
+  <AppContextMenuModals {app} bind:this={appContextMenuModals} />
 </div>
 
 <style>
@@ -94,9 +143,20 @@
     transition: border 130ms ease-out;
     border: 1px solid transparent;
   }
-  .app-row:hover {
+  .app-row:not(.unclickable):hover,
+  .contextMenuOpen {
     cursor: pointer;
     border-color: var(--spectrum-global-color-gray-300);
+  }
+
+  .app-row .favourite-icon {
+    display: none;
+  }
+
+  .app-row.contextMenuOpen .favourite-icon,
+  .app-row:hover .favourite-icon,
+  .app-row.favourite .favourite-icon {
+    display: flex;
   }
 
   .updated {
@@ -134,11 +194,23 @@
   }
 
   .app-row-actions {
+    display: none;
+  }
+
+  .app-row.contextMenuOpen .app-row-actions,
+  .app-row:hover .app-row-actions {
     gap: var(--spacing-m);
-    display: flex;
     flex-direction: row;
     justify-content: flex-end;
     align-items: center;
+    display: flex;
+  }
+
+  .actions-wrap {
+    gap: var(--spacing-m);
+    display: flex;
+    justify-content: flex-end;
+    min-height: var(--spectrum-alias-item-height-s);
   }
 
   .name {

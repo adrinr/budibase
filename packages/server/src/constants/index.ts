@@ -1,17 +1,14 @@
 import { constants, objectStore, roles } from "@budibase/backend-core"
 import {
-  FieldType as FieldTypes,
+  FieldType,
   INTERNAL_TABLE_SOURCE_ID,
   Table,
   TableSourceType,
 } from "@budibase/types"
 
-export {
-  FieldType as FieldTypes,
-  RelationshipType,
-  AutoFieldSubTypes,
-  FormulaTypes,
-} from "@budibase/types"
+import env from "../environment"
+
+export const AWS_REGION = env.AWS_REGION ? env.AWS_REGION : "eu-west-1"
 
 export enum FilterTypes {
   STRING = "string",
@@ -23,27 +20,19 @@ export enum FilterTypes {
   NOT_EMPTY = "notEmpty",
   CONTAINS = "contains",
   NOT_CONTAINS = "notContains",
+  CONTAINS_ANY = "containsAny",
   ONE_OF = "oneOf",
 }
 
-export const NoEmptyFilterStrings = [
-  FilterTypes.STRING,
-  FilterTypes.FUZZY,
-  FilterTypes.EQUAL,
-  FilterTypes.NOT_EQUAL,
-  FilterTypes.CONTAINS,
-  FilterTypes.NOT_CONTAINS,
-]
-
 export const CanSwitchTypes = [
-  [FieldTypes.JSON, FieldTypes.ARRAY],
+  [FieldType.JSON, FieldType.ARRAY],
   [
-    FieldTypes.STRING,
-    FieldTypes.OPTIONS,
-    FieldTypes.LONGFORM,
-    FieldTypes.BARCODEQR,
+    FieldType.STRING,
+    FieldType.OPTIONS,
+    FieldType.LONGFORM,
+    FieldType.BARCODEQR,
   ],
-  [FieldTypes.BOOLEAN, FieldTypes.NUMBER],
+  [FieldType.BOOLEAN, FieldType.NUMBER],
 ]
 
 export const SwitchableTypes = CanSwitchTypes.reduce((prev, current) =>
@@ -56,24 +45,8 @@ export enum AuthTypes {
   EXTERNAL = "external",
 }
 
-export enum DataSourceOperation {
-  CREATE = "CREATE",
-  READ = "READ",
-  UPDATE = "UPDATE",
-  DELETE = "DELETE",
-  BULK_CREATE = "BULK_CREATE",
-  CREATE_TABLE = "CREATE_TABLE",
-  UPDATE_TABLE = "UPDATE_TABLE",
-  DELETE_TABLE = "DELETE_TABLE",
-}
-
 export enum DatasourceAuthTypes {
   GOOGLE = "google",
-}
-
-export enum SortDirection {
-  ASCENDING = "ASCENDING",
-  DESCENDING = "DESCENDING",
 }
 
 export const USERS_TABLE_SCHEMA: Table = {
@@ -86,9 +59,9 @@ export const USERS_TABLE_SCHEMA: Table = {
   // TODO: ADMIN PANEL - when implemented this doesn't need to be carried out
   schema: {
     email: {
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         email: true,
         length: {
           maximum: "",
@@ -99,34 +72,34 @@ export const USERS_TABLE_SCHEMA: Table = {
     },
     firstName: {
       name: "firstName",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         presence: false,
       },
     },
     lastName: {
       name: "lastName",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         presence: false,
       },
     },
     roleId: {
       name: "roleId",
-      type: FieldTypes.OPTIONS,
+      type: FieldType.OPTIONS,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         presence: false,
         inclusion: Object.values(roles.BUILTIN_ROLE_IDS),
       },
     },
     status: {
       name: "status",
-      type: FieldTypes.OPTIONS,
+      type: FieldType.OPTIONS,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         presence: false,
         inclusion: Object.values(constants.UserStatus),
       },
@@ -151,11 +124,6 @@ export enum BaseQueryVerbs {
   DELETE = "delete",
 }
 
-export enum MetadataTypes {
-  AUTOMATION_TEST_INPUT = "automationTestInput",
-  AUTOMATION_TEST_HISTORY = "automationTestHistory",
-}
-
 export enum InvalidColumns {
   ID = "_id",
   REV = "_rev",
@@ -164,7 +132,6 @@ export enum InvalidColumns {
 
 export enum AutomationErrors {
   INCORRECT_TYPE = "INCORRECT_TYPE",
-  MAX_ITERATIONS = "MAX_ITERATIONS_REACHED",
   FAILURE_CONDITION = "FAILURE_CONDITION_MET",
 }
 
@@ -172,8 +139,14 @@ export enum AutomationErrors {
 export const ObjectStoreBuckets = objectStore.ObjectStoreBuckets
 export const MAX_AUTOMATION_RECURRING_ERRORS = 5
 export const GOOGLE_SHEETS_PRIMARY_KEY = "rowNumber"
-export const DEFAULT_JOBS_TABLE_ID = "ta_bb_jobs"
-export const DEFAULT_INVENTORY_TABLE_ID = "ta_bb_inventory"
-export const DEFAULT_EXPENSES_TABLE_ID = "ta_bb_expenses"
-export const DEFAULT_EMPLOYEE_TABLE_ID = "ta_bb_employee"
-export const DEFAULT_BB_DATASOURCE_ID = "datasource_internal_bb_default"
+export const DEFAULT_JOBS_TABLE_ID = constants.DEFAULT_JOBS_TABLE_ID
+export const DEFAULT_INVENTORY_TABLE_ID = constants.DEFAULT_INVENTORY_TABLE_ID
+export const DEFAULT_EXPENSES_TABLE_ID = constants.DEFAULT_EXPENSES_TABLE_ID
+export const DEFAULT_EMPLOYEE_TABLE_ID = constants.DEFAULT_EMPLOYEE_TABLE_ID
+export const DEFAULT_BB_DATASOURCE_ID = constants.DEFAULT_BB_DATASOURCE_ID
+export const DEFAULT_TABLE_IDS = [
+  DEFAULT_JOBS_TABLE_ID,
+  DEFAULT_INVENTORY_TABLE_ID,
+  DEFAULT_EXPENSES_TABLE_ID,
+  DEFAULT_EMPLOYEE_TABLE_ID,
+]

@@ -10,6 +10,13 @@ import { ApplicationAPI } from "./application"
 import { BackupAPI } from "./backup"
 import { AttachmentAPI } from "./attachment"
 import { UserAPI } from "./user"
+import { QueryAPI } from "./query"
+import { RoleAPI } from "./role"
+import { TemplateAPI } from "./template"
+import { RowActionAPI } from "./rowAction"
+import { AutomationAPI } from "./automation"
+import { PluginAPI } from "./plugin"
+import { WebhookAPI } from "./webhook"
 
 export default class API {
   table: TableAPI
@@ -23,6 +30,13 @@ export default class API {
   backup: BackupAPI
   attachment: AttachmentAPI
   user: UserAPI
+  query: QueryAPI
+  roles: RoleAPI
+  templates: TemplateAPI
+  rowAction: RowActionAPI
+  automation: AutomationAPI
+  plugin: PluginAPI
+  webhook: WebhookAPI
 
   constructor(config: TestConfiguration) {
     this.table = new TableAPI(config)
@@ -36,5 +50,12 @@ export default class API {
     this.backup = new BackupAPI(config)
     this.attachment = new AttachmentAPI(config)
     this.user = new UserAPI(config)
+    this.query = new QueryAPI(config)
+    this.roles = new RoleAPI(config)
+    this.templates = new TemplateAPI(config)
+    this.rowAction = new RowActionAPI(config)
+    this.automation = new AutomationAPI(config)
+    this.plugin = new PluginAPI(config)
+    this.webhook = new WebhookAPI(config)
   }
 }

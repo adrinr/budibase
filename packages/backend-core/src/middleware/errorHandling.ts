@@ -1,5 +1,7 @@
 import { APIError } from "@budibase/types"
 import * as errors from "../errors"
+import environment from "../environment"
+import { stringContainsSecret } from "../security/secrets"
 
 export async function errorHandling(ctx: any, next: any) {
   try {
@@ -11,18 +13,30 @@ export async function errorHandling(ctx: any, next: any) {
     if (status >= 400 && status < 500) {
       console.warn(err)
     } else {
-      console.error(err)
+      console.error("Got 400 response code", err)
     }
 
-    const error = errors.getPublicError(err)
-    const body: APIError = {
+    let error: APIError = {
       message: err.message,
-      status: status,
+      status,
       validationErrors: err.validation,
-      error,
+      error: errors.getPublicError(err),
     }
 
-    ctx.body = body
+    if (stringContainsSecret(JSON.stringify(error))) {
+      error = {
+        message: "Unexpected error",
+        status,
+        error: "Unexpected error",
+      }
+    }
+
+    if (environment.isTest() && ctx.headers["x-budibase-include-stacktrace"]) {
+      // @ts-ignore
+      error.stack = err.stack
+    }
+
+    ctx.body = error
   }
 }
 

@@ -1,8 +1,9 @@
 <script>
-  import { Icon, Body } from "@budibase/bbui"
+  import { Icon, Body, TooltipPosition, TooltipType } from "@budibase/bbui"
 
   export let title
   export let icon
+  export let iconTooltip
   export let showAddButton = false
   export let showBackButton = false
   export let showCloseButton = false
@@ -11,14 +12,19 @@
   export let onClickCloseButton
   export let borderLeft = false
   export let borderRight = false
+  export let borderBottomHeader = true
   export let wide = false
   export let extraWide = false
   export let closeButtonIcon = "Close"
+  export let noHeaderBorder = false
+  export let titleCSS = true
 
   $: customHeaderContent = $$slots["panel-header-content"]
   $: customTitleContent = $$slots["panel-title-content"]
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="panel"
   class:wide
@@ -26,14 +32,24 @@
   class:borderLeft
   class:borderRight
 >
-  <div class="header" class:custom={customHeaderContent}>
+  <div
+    class="header"
+    class:custom={customHeaderContent}
+    class:borderBottom={borderBottomHeader}
+    class:noHeaderBorder
+  >
     {#if showBackButton}
       <Icon name="ArrowLeft" hoverable on:click={onClickBackButton} />
     {/if}
     {#if icon}
-      <Icon name={icon} />
+      <Icon
+        name={icon}
+        tooltipType={TooltipType.Info}
+        tooltip={iconTooltip}
+        tooltipPosition={TooltipPosition.Top}
+      />
     {/if}
-    <div class="title">
+    <div class:title={titleCSS}>
       {#if customTitleContent}
         <slot name="panel-title-content" />
       {:else}
@@ -63,6 +79,7 @@
 
 <style>
   .panel {
+    min-width: 260px;
     width: 260px;
     flex: 0 0 260px;
     background: var(--background);
@@ -80,6 +97,7 @@
     border-right: var(--border-light);
   }
   .panel.wide {
+    min-width: 310px;
     width: 310px;
     flex: 0 0 310px;
   }
@@ -94,8 +112,14 @@
     justify-content: space-between;
     align-items: center;
     padding: 0 var(--spacing-l);
-    border-bottom: var(--border-light);
     gap: var(--spacing-m);
+  }
+
+  .noHeaderBorder {
+    border-bottom: none !important;
+  }
+  .header.borderBottom {
+    border-bottom: var(--border-light);
   }
   .title {
     flex: 1 1 auto;

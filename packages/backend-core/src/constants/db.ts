@@ -1,4 +1,5 @@
 import { prefixed, DocumentType } from "@budibase/types"
+
 export {
   SEPARATOR,
   UNICODE_MAX,
@@ -56,9 +57,19 @@ export const StaticDatabases = {
   AUDIT_LOGS: {
     name: "audit-logs",
   },
+  SCIM_LOGS: {
+    name: "scim-logs",
+  },
 }
 
 export const APP_PREFIX = prefixed(DocumentType.APP)
 export const APP_DEV = prefixed(DocumentType.APP_DEV)
 export const APP_DEV_PREFIX = APP_DEV
+export const SQS_DATASOURCE_INTERNAL = "internal"
 export const BUDIBASE_DATASOURCE_TYPE = "budibase"
+export const SQLITE_DESIGN_DOC_ID = "_design/sqlite"
+export const DEFAULT_JOBS_TABLE_ID = "ta_bb_jobs"
+export const DEFAULT_INVENTORY_TABLE_ID = "ta_bb_inventory"
+export const DEFAULT_EXPENSES_TABLE_ID = "ta_bb_expenses"
+export const DEFAULT_EMPLOYEE_TABLE_ID = "ta_bb_employee"
+export { DEFAULT_BB_DATASOURCE_ID } from "@budibase/shared-core"

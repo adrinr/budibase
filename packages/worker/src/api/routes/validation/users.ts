@@ -26,6 +26,10 @@ export const buildSelfSaveValidation = () => {
     firstName: OPTIONAL_STRING,
     lastName: OPTIONAL_STRING,
     onboardedAt: Joi.string().optional(),
+    freeTrialConfirmedAt: Joi.string().optional(),
+    appFavourites: Joi.array().optional(),
+    tours: Joi.object().optional(),
+    appSort: Joi.string().optional(),
   }
   return auth.joiValidator.body(Joi.object(schema).required().unknown(false))
 }
@@ -37,6 +41,15 @@ export const buildUserSaveValidation = () => {
     _rev: Joi.string(),
   }
   return auth.joiValidator.body(Joi.object(schema).required().unknown(true))
+}
+
+export const buildAddSsoSupport = () => {
+  return auth.joiValidator.body(
+    Joi.object({
+      ssoId: Joi.string().required(),
+      email: Joi.string().required(),
+    }).required()
+  )
 }
 
 export const buildUserBulkUserValidation = (isSelf = false) => {
@@ -53,7 +66,14 @@ export const buildUserBulkUserValidation = (isSelf = false) => {
       users: Joi.array().items(Joi.object(schema).required().unknown(true)),
     }),
     delete: Joi.object({
-      userIds: Joi.array().items(Joi.string()),
+      users: Joi.array().items(
+        Joi.object({
+          email: Joi.string(),
+          userId: Joi.string(),
+        })
+          .required()
+          .unknown(true)
+      ),
     }),
   }
 

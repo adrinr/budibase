@@ -3,39 +3,84 @@ import env from "../../../environment"
 import {
   AcceptUserInviteRequest,
   AcceptUserInviteResponse,
+  AddSSoUserRequest,
+  AddSSoUserResponse,
   BulkUserRequest,
   BulkUserResponse,
-  CloudAccount,
+  CheckInviteResponse,
+  CountUserResponse,
   CreateAdminUserRequest,
   CreateAdminUserResponse,
   Ctx,
+  DeleteInviteUserRequest,
+  DeleteInviteUsersRequest,
+  DeleteInviteUsersResponse,
+  DeleteUserResponse,
+  FetchUsersResponse,
+  FindUserResponse,
+  GetUserInvitesResponse,
+  Hosting,
   InviteUserRequest,
+  InviteUserResponse,
   InviteUsersRequest,
   InviteUsersResponse,
+  LockName,
+  LockType,
+  LookupAccountHolderResponse,
+  LookupTenantUserResponse,
   MigrationType,
+  PlatformUserByEmail,
   SaveUserResponse,
   SearchUsersRequest,
+  SearchUsersResponse,
+  UpdateInviteRequest,
+  UpdateInviteResponse,
   User,
   UserCtx,
+  UserIdentifier,
 } from "@budibase/types"
 import {
-  accounts,
+  users,
   cache,
   ErrorCode,
   events,
   migrations,
   platform,
   tenancy,
+  db,
+  locks,
 } from "@budibase/backend-core"
 import { checkAnyUserExists } from "../../../utilities/users"
 import { isEmailConfigured } from "../../../utilities/email"
+import { BpmStatusKey, BpmStatusValue, utils } from "@budibase/shared-core"
+import emailValidator from "email-validator"
+import crypto from "crypto"
 
 const MAX_USERS_UPLOAD_LIMIT = 1000
+
+const generatePassword = (length: number) => {
+  const array = new Uint8Array(length)
+  crypto.getRandomValues(array)
+  return Array.from(array, byte => byte.toString(36).padStart(2, "0"))
+    .join("")
+    .slice(0, length)
+}
 
 export const save = async (ctx: UserCtx<User, SaveUserResponse>) => {
   try {
     const currentUserId = ctx.user?._id
     const requestUser = ctx.request.body
+
+    // Do not allow the account holder role to be changed
+    const accountMetadata = await users.getExistingAccounts([requestUser.email])
+    if (accountMetadata?.length > 0) {
+      if (
+        requestUser.admin?.global !== true ||
+        requestUser.builder?.global !== true
+      ) {
+        throw Error("Cannot set role of account holder")
+      }
+    }
 
     const user = await userSdk.db.save(requestUser, { currentUserId })
 
@@ -49,11 +94,42 @@ export const save = async (ctx: UserCtx<User, SaveUserResponse>) => {
   }
 }
 
-const bulkDelete = async (userIds: string[], currentUserId: string) => {
-  if (userIds?.indexOf(currentUserId) !== -1) {
+export const addSsoSupport = async (
+  ctx: Ctx<AddSSoUserRequest, AddSSoUserResponse>
+) => {
+  const { email, ssoId } = ctx.request.body
+  try {
+    // Status is changed to 404 from getUserDoc if user is not found
+    const userByEmail = (await platform.users.getUserDoc(
+      email
+    )) as PlatformUserByEmail
+    await platform.users.addSsoUser(
+      ssoId,
+      email,
+      userByEmail.userId,
+      userByEmail.tenantId
+    )
+    // Need to get the _rev of the user doc to update
+    const userById = await platform.users.getUserDoc(userByEmail.userId)
+    await platform.users.updateUserDoc({
+      ...userById,
+      email,
+      ssoId,
+    })
+    ctx.body = { message: "SSO support added." }
+  } catch (err: any) {
+    ctx.throw(err.status || 400, err)
+  }
+}
+
+const bulkDelete = async (
+  users: Array<UserIdentifier>,
+  currentUserId: string
+) => {
+  if (users.find(u => u.userId === currentUserId)) {
     throw new Error("Unable to delete self.")
   }
-  return await userSdk.db.bulkDelete(userIds)
+  return await userSdk.db.bulkDelete(users)
 }
 
 const bulkCreate = async (users: User[], groupIds: string[]) => {
@@ -76,7 +152,7 @@ export const bulkUpdate = async (
       created = await bulkCreate(input.create.users, input.create.groups)
     }
     if (input.delete) {
-      deleted = await bulkDelete(input.delete.userIds, currentUserId)
+      deleted = await bulkDelete(input.delete.users, currentUserId)
     }
   } catch (err: any) {
     ctx.throw(err.status || 400, err?.message || err)
@@ -91,7 +167,8 @@ const parseBooleanParam = (param: any) => {
 export const adminUser = async (
   ctx: Ctx<CreateAdminUserRequest, CreateAdminUserResponse>
 ) => {
-  const { email, password, tenantId, ssoId } = ctx.request.body
+  const { email, password, tenantId, ssoId, givenName, familyName } =
+    ctx.request.body
 
   if (await platform.tenants.exists(tenantId)) {
     ctx.throw(403, "Organisation already exists.")
@@ -120,35 +197,20 @@ export const adminUser = async (
       )
     }
 
-    const user: User = {
-      email: email,
-      password: password,
-      createdAt: Date.now(),
-      roles: {},
-      builder: {
-        global: true,
-      },
-      admin: {
-        global: true,
-      },
-      tenantId,
-      ssoId,
-    }
     try {
-      // always bust checklist beforehand, if an error occurs but can proceed, don't get
-      // stuck in a cycle
-      await cache.bustCache(cache.CacheKey.CHECKLIST)
-      const finalUser = await userSdk.db.save(user, {
+      const finalUser = await userSdk.db.createAdminUser(email, tenantId, {
+        password,
+        ssoId,
         hashPassword,
         requirePassword,
+        firstName: givenName,
+        lastName: familyName,
       })
 
-      // events
-      let account: CloudAccount | undefined
-      if (!env.SELF_HOSTED && !env.DISABLE_ACCOUNT_PORTAL) {
-        account = await accounts.getAccountByTenantId(tenantId)
-      }
-      await events.identification.identifyTenantGroup(tenantId, account)
+      await events.identification.identifyTenantGroup(
+        tenantId,
+        env.SELF_HOSTED ? Hosting.SELF : Hosting.CLOUD
+      )
 
       ctx.body = {
         _id: finalUser._id!,
@@ -161,7 +223,7 @@ export const adminUser = async (
   })
 }
 
-export const countByApp = async (ctx: any) => {
+export const countByApp = async (ctx: UserCtx<void, CountUserResponse>) => {
   const appId = ctx.params.appId
   try {
     ctx.body = await userSdk.db.countUsersByApp(appId)
@@ -170,7 +232,7 @@ export const countByApp = async (ctx: any) => {
   }
 }
 
-export const destroy = async (ctx: any) => {
+export const destroy = async (ctx: UserCtx<void, DeleteUserResponse>) => {
   const id = ctx.params.id
   if (id === ctx.user._id) {
     ctx.throw(400, "Unable to delete self.")
@@ -193,12 +255,32 @@ export const getAppUsers = async (ctx: Ctx<SearchUsersRequest>) => {
   ctx.body = { data: users }
 }
 
-export const search = async (ctx: Ctx<SearchUsersRequest>) => {
+export const search = async (
+  ctx: Ctx<SearchUsersRequest, SearchUsersResponse>
+) => {
   const body = ctx.request.body
 
-  // TODO: for now only one supported search key, string.email
-  if (body?.query && !userSdk.core.isSupportedUserSearch(body.query)) {
-    ctx.throw(501, "Can only search by string.email or equal._id")
+  // TODO: for now only two supported search keys; string.email and equal._id
+  if (body?.query) {
+    // Clean numeric prefixing. This will overwrite duplicate search fields,
+    // but this is fine because we only support a single custom search on
+    // email and id
+    for (let filters of Object.values(body.query)) {
+      if (filters && typeof filters === "object") {
+        for (let [field, value] of Object.entries(filters)) {
+          delete filters[field]
+          const cleanedField = db.removeKeyNumbering(field)
+          if (filters[cleanedField] !== undefined) {
+            ctx.throw(400, "Only 1 filter per field is supported")
+          }
+          filters[cleanedField] = value
+        }
+      }
+    }
+    // Validate we aren't trying to search on any illegal fields
+    if (!utils.isSupportedUserSearch(body.query)) {
+      ctx.throw(400, "Can only search by string.email, equal._id or oneOf._id")
+    }
   }
 
   if (body.paginate === false) {
@@ -216,7 +298,7 @@ export const search = async (ctx: Ctx<SearchUsersRequest>) => {
 }
 
 // called internally by app server user fetch
-export const fetch = async (ctx: any) => {
+export const fetch = async (ctx: UserCtx<void, FetchUsersResponse>) => {
   const all = await userSdk.db.allUsers()
   // user hashed password shouldn't ever be returned
   for (let user of all) {
@@ -228,17 +310,47 @@ export const fetch = async (ctx: any) => {
 }
 
 // called internally by app server user find
-export const find = async (ctx: any) => {
+export const find = async (ctx: UserCtx<void, FindUserResponse>) => {
   ctx.body = await userSdk.db.getUser(ctx.params.id)
 }
 
-export const tenantUserLookup = async (ctx: any) => {
+export const tenantUserLookup = async (
+  ctx: UserCtx<void, LookupTenantUserResponse>
+) => {
   const id = ctx.params.id
-  const user = await userSdk.core.getPlatformUser(id)
+  // is email, check its valid
+  if (id.includes("@") && !emailValidator.validate(id)) {
+    ctx.throw(400, `${id} is not a valid email address to lookup.`)
+  }
+  const user = await userSdk.core.getFirstPlatformUser(id)
   if (user) {
     ctx.body = user
   } else {
     ctx.throw(400, "No tenant user found.")
+  }
+}
+
+/**
+ * This will be paginated to a default of the first 50 users,
+ * So the account holder may not be found until further pagination has occurred
+ */
+export const accountHolderLookup = async (
+  ctx: Ctx<void, LookupAccountHolderResponse>
+) => {
+  try {
+    const users = await userSdk.core.getAllUsers()
+    const response = await userSdk.core.getExistingAccounts(
+      users.map(u => u.email)
+    )
+    const holder = response[0]
+    if (!holder) {
+      ctx.body = null
+      return
+    }
+    holder._id = users.find(u => u.email === holder.email)?._id
+    ctx.body = holder
+  } catch (e) {
+    ctx.body = null
   }
 }
 
@@ -255,7 +367,7 @@ export const onboardUsers = async (
 
   let createdPasswords: Record<string, string> = {}
   const users: User[] = ctx.request.body.map(invite => {
-    let password = Math.random().toString(36).substring(2, 22)
+    const password = generatePassword(12)
     createdPasswords[invite.email] = password
 
     return {
@@ -276,7 +388,9 @@ export const onboardUsers = async (
   ctx.body = { ...resp, created: true }
 }
 
-export const invite = async (ctx: Ctx<InviteUserRequest>) => {
+export const invite = async (
+  ctx: Ctx<InviteUserRequest, InviteUserResponse>
+) => {
   const request = ctx.request.body
 
   let multiRequest = [request]
@@ -299,11 +413,27 @@ export const invite = async (ctx: Ctx<InviteUserRequest>) => {
   }
 }
 
-export const inviteMultiple = async (ctx: Ctx<InviteUsersRequest>) => {
+export const inviteMultiple = async (
+  ctx: Ctx<InviteUsersRequest, InviteUsersResponse>
+) => {
   ctx.body = await userSdk.invite(ctx.request.body)
 }
 
-export const checkInvite = async (ctx: any) => {
+export const removeMultipleInvites = async (
+  ctx: Ctx<DeleteInviteUsersRequest, DeleteInviteUsersResponse>
+) => {
+  const inviteCodesToRemove = ctx.request.body.map(
+    (invite: DeleteInviteUserRequest) => invite.code
+  )
+  for (const code of inviteCodesToRemove) {
+    await cache.invite.deleteCode(code)
+  }
+  ctx.body = {
+    message: "User invites successfully removed.",
+  }
+}
+
+export const checkInvite = async (ctx: UserCtx<void, CheckInviteResponse>) => {
   const { code } = ctx.params
   let invite
   try {
@@ -318,7 +448,9 @@ export const checkInvite = async (ctx: any) => {
   }
 }
 
-export const getUserInvites = async (ctx: any) => {
+export const getUserInvites = async (
+  ctx: UserCtx<void, GetUserInvitesResponse>
+) => {
   try {
     // Restricted to the currently authenticated tenant
     ctx.body = await cache.invite.getInviteCodes()
@@ -327,7 +459,9 @@ export const getUserInvites = async (ctx: any) => {
   }
 }
 
-export const updateInvite = async (ctx: any) => {
+export const updateInvite = async (
+  ctx: UserCtx<UpdateInviteRequest, UpdateInviteResponse>
+) => {
   const { code } = ctx.params
   let updateBody = { ...ctx.request.body }
 
@@ -372,51 +506,66 @@ export const inviteAccept = async (
 ) => {
   const { inviteCode, password, firstName, lastName } = ctx.request.body
   try {
-    // info is an extension of the user object that was stored by global
-    const { email, info }: any = await cache.invite.getCode(inviteCode)
-    await cache.invite.deleteCode(inviteCode)
-    const user = await tenancy.doInTenant(info.tenantId, async () => {
-      let request: any = {
-        firstName,
-        lastName,
-        password,
-        email,
-        admin: { global: info?.admin?.global || false },
-        roles: info.apps,
-        tenantId: info.tenantId,
-      }
-      let builder: { global: boolean; apps?: string[] } = {
-        global: info?.builder?.global || false,
-      }
+    await locks.doWithLock(
+      {
+        type: LockType.AUTO_EXTEND,
+        name: LockName.PROCESS_USER_INVITE,
+        resource: inviteCode,
+        systemLock: true,
+      },
+      async () => {
+        // info is an extension of the user object that was stored by global
+        const { email, info } = await cache.invite.getCode(inviteCode)
+        const user = await tenancy.doInTenant(info.tenantId, async () => {
+          let request: any = {
+            firstName,
+            lastName,
+            password,
+            email,
+            admin: { global: info?.admin?.global || false },
+            roles: info.apps,
+            tenantId: info.tenantId,
+          }
+          const builder: { global: boolean; apps?: string[] } = {
+            global: info?.builder?.global || false,
+          }
 
-      if (info?.builder?.apps) {
-        builder.apps = info.builder.apps
-        request.builder = builder
-      }
-      delete info.apps
-      request = {
-        ...request,
-        ...info,
-      }
+          if (info?.builder?.apps) {
+            builder.apps = info.builder.apps
+            request.builder = builder
+          }
+          delete info.apps
+          request = {
+            ...request,
+            ...info,
+          }
 
-      const saved = await userSdk.db.save(request)
-      const db = tenancy.getGlobalDB()
-      const user = await db.get<User>(saved._id)
-      await events.user.inviteAccepted(user)
-      return saved
-    })
+          const saved = await userSdk.db.save(request)
+          await events.user.inviteAccepted(saved)
+          return saved
+        })
 
-    ctx.body = {
-      _id: user._id!,
-      _rev: user._rev!,
-      email: user.email,
-    }
+        await cache.invite.deleteCode(inviteCode)
+
+        // make sure onboarding flow is cleared
+        ctx.cookies.set(BpmStatusKey.ONBOARDING, BpmStatusValue.COMPLETED, {
+          expires: new Date(0),
+        })
+
+        ctx.body = {
+          _id: user._id!,
+          _rev: user._rev!,
+          email: user.email,
+          tenantId: user.tenantId,
+        }
+      }
+    )
   } catch (err: any) {
     if (err.code === ErrorCode.USAGE_LIMIT_EXCEEDED) {
       // explicitly re-throw limit exceeded errors
       ctx.throw(400, err)
     }
     console.warn("Error inviting user", err)
-    ctx.throw(400, "Unable to create new user, invitation invalid.")
+    ctx.throw(400, err || "Unable to create new user, invitation invalid.")
   }
 }

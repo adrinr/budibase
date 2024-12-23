@@ -1,16 +1,18 @@
-import { structures, mocks } from "../../../../../tests"
+import { structures } from "../../../../../tests"
 import { testEnv } from "../../../../../tests/extra"
 import { SSOAuthDetails, User } from "@budibase/types"
 
 import { HTTPError } from "../../../../errors"
 import * as sso from "../sso"
 import * as context from "../../../../context"
+import nock from "nock"
 
 const mockDone = jest.fn()
 const mockSaveUser = jest.fn()
 
 jest.mock("../../../../users")
 import * as _users from "../../../../users"
+
 const users = jest.mocked(_users)
 
 const getErrorMessage = () => {
@@ -22,6 +24,7 @@ describe("sso", () => {
     beforeEach(() => {
       jest.clearAllMocks()
       testEnv.singleTenant()
+      nock.cleanAll()
     })
 
     describe("validation", () => {
@@ -50,15 +53,6 @@ describe("sso", () => {
       })
     })
 
-    function mockGetProfilePicture() {
-      mocks.fetch.mockReturnValueOnce(
-        Promise.resolve({
-          status: 200,
-          headers: { get: () => "image/" },
-        })
-      )
-    }
-
     describe("when the user doesn't exist", () => {
       let user: User
       let details: SSOAuthDetails
@@ -67,7 +61,10 @@ describe("sso", () => {
         users.getById.mockImplementationOnce(() => {
           throw new HTTPError("", 404)
         })
-        mockGetProfilePicture()
+
+        nock("http://example.com").get("/").reply(200, undefined, {
+          "Content-Type": "image/png",
+        })
 
         user = structures.users.user()
         delete user._rev
@@ -113,11 +110,11 @@ describe("sso", () => {
           // tenant id added
           ssoUser.tenantId = context.getTenantId()
 
-          expect(mockSaveUser).toBeCalledWith(ssoUser, {
+          expect(mockSaveUser).toHaveBeenCalledWith(ssoUser, {
             hashPassword: false,
             requirePassword: false,
           })
-          expect(mockDone).toBeCalledWith(null, ssoUser)
+          expect(mockDone).toHaveBeenCalledWith(null, ssoUser)
         })
       })
     })
@@ -130,7 +127,9 @@ describe("sso", () => {
         existingUser = structures.users.user()
         existingUser._id = structures.uuid()
         details = structures.sso.authDetails(existingUser)
-        mockGetProfilePicture()
+        nock("http://example.com").get("/").reply(200, undefined, {
+          "Content-Type": "image/png",
+        })
       })
 
       describe("exists by email", () => {
@@ -158,11 +157,11 @@ describe("sso", () => {
           // existing id preserved
           ssoUser._id = existingUser._id
 
-          expect(mockSaveUser).toBeCalledWith(ssoUser, {
+          expect(mockSaveUser).toHaveBeenCalledWith(ssoUser, {
             hashPassword: false,
             requirePassword: false,
           })
-          expect(mockDone).toBeCalledWith(null, ssoUser)
+          expect(mockDone).toHaveBeenCalledWith(null, ssoUser)
         })
       })
 
@@ -186,11 +185,11 @@ describe("sso", () => {
           // existing id preserved
           ssoUser._id = existingUser._id
 
-          expect(mockSaveUser).toBeCalledWith(ssoUser, {
+          expect(mockSaveUser).toHaveBeenCalledWith(ssoUser, {
             hashPassword: false,
             requirePassword: false,
           })
-          expect(mockDone).toBeCalledWith(null, ssoUser)
+          expect(mockDone).toHaveBeenCalledWith(null, ssoUser)
         })
       })
     })

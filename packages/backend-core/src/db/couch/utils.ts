@@ -4,7 +4,7 @@ import { checkSlashesInUrl } from "../../helpers"
 
 export async function directCouchCall(
   path: string,
-  method: string = "GET",
+  method = "GET",
   body?: any
 ) {
   let { url, cookie } = getCouchInfo()
@@ -21,7 +21,7 @@ export async function directCouchUrlCall({
   url: string
   cookie: string
   method: string
-  body?: any
+  body?: Record<string, any>
 }) {
   const params: any = {
     method: method,
@@ -30,15 +30,20 @@ export async function directCouchUrlCall({
     },
   }
   if (body && method !== "GET") {
-    params.body = JSON.stringify(body)
-    params.headers["Content-Type"] = "application/json"
+    if (typeof body === "string") {
+      params.body = body
+      params.headers["Content-Type"] = "text/plain"
+    } else {
+      params.body = JSON.stringify(body)
+      params.headers["Content-Type"] = "application/json"
+    }
   }
   return await fetch(checkSlashesInUrl(encodeURI(url)), params)
 }
 
 export async function directCouchQuery(
   path: string,
-  method: string = "GET",
+  method = "GET",
   body?: any
 ) {
   const response = await directCouchCall(path, method, body)

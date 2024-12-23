@@ -1,5 +1,5 @@
 <script>
-  import { tables } from "stores/backend"
+  import { tables } from "stores/builder"
   import { Select } from "@budibase/bbui"
   import { createEventDispatcher } from "svelte"
   import { TableNames } from "constants"
@@ -8,6 +8,7 @@
 
   export let value
   export let isTrigger
+  export let disabled = false
 
   $: filteredTables = $tables.list.filter(table => {
     return !isTrigger || table._id !== TableNames.USERS
@@ -22,7 +23,8 @@
 <Select
   on:change={onChange}
   bind:value
-  options={filteredTables.filter(table => table._id !== TableNames.USERS)}
+  options={filteredTables}
   getOptionLabel={table => table.name}
   getOptionValue={table => table._id}
+  {disabled}
 />

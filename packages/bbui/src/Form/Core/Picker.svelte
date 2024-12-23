@@ -14,7 +14,6 @@
 
   export let id = null
   export let disabled = false
-  export let error = null
   export let fieldText = ""
   export let fieldIcon = ""
   export let fieldColour = ""
@@ -38,17 +37,16 @@
   export let sort = false
   export let searchTerm = null
   export let customPopoverHeight
-  export let customPopoverOffsetBelow
-  export let customPopoverMaxHeight
   export let align = "left"
   export let footer = null
   export let customAnchor = null
   export let loading
+  export let onOptionMouseenter = () => {}
+  export let onOptionMouseleave = () => {}
 
   const dispatch = createEventDispatcher()
 
   let button
-  let popover
   let component
 
   $: sortedOptions = getSortedOptions(options, getOptionLabel, sort)
@@ -113,7 +111,6 @@
   class="spectrum-Picker spectrum-Picker--sizeM"
   class:spectrum-Picker--quiet={quiet}
   {disabled}
-  class:is-invalid={!!error}
   class:is-open={open}
   aria-haspopup="listbox"
   on:click={onClick}
@@ -142,16 +139,6 @@
   >
     {fieldText}
   </span>
-  {#if error}
-    <svg
-      class="spectrum-Icon spectrum-Icon--sizeM spectrum-Picker-validationIcon"
-      focusable="false"
-      aria-hidden="true"
-      aria-label="Folder"
-    >
-      <use xlink:href="#spectrum-icon-18-Alert" />
-    </svg>
-  {/if}
   <svg
     class="spectrum-Icon spectrum-UIIcon-ChevronDown100 spectrum-Picker-menuIcon"
     focusable="false"
@@ -160,17 +147,17 @@
     <use xlink:href="#spectrum-css-icon-Chevron100" />
   </svg>
 </button>
+
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <Popover
   anchor={customAnchor ? customAnchor : button}
   align={align || "left"}
-  bind:this={popover}
   {open}
   on:close={() => (open = false)}
   useAnchorWidth={!autoWidth}
   maxWidth={autoWidth ? 400 : null}
-  maxHeight={customPopoverMaxHeight}
   customHeight={customPopoverHeight}
-  offsetBelow={customPopoverOffsetBelow}
+  maxHeight={360}
 >
   <div
     class="popover-content"
@@ -214,6 +201,8 @@
             aria-selected="true"
             tabindex="0"
             on:click={() => onSelectOption(getOptionValue(option, idx))}
+            on:mouseenter={e => onOptionMouseenter(e, option)}
+            on:mouseleave={e => onOptionMouseleave(e, option)}
             class:is-disabled={!isOptionEnabled(option)}
           >
             {#if getOptionIcon(option, idx)}
@@ -236,13 +225,12 @@
               </span>
             {/if}
             <span class="spectrum-Menu-itemLabel">
-              {#if getOptionSubtitle(option, idx)}
-                <span class="subtitle-text"
-                  >{getOptionSubtitle(option, idx)}</span
-                >
-              {/if}
-
               {getOptionLabel(option, idx)}
+              {#if getOptionSubtitle(option, idx)}
+                <span class="subtitle-text">
+                  {getOptionSubtitle(option, idx)}
+                </span>
+              {/if}
             </span>
             {#if option.tag}
               <span class="option-tag">
@@ -282,17 +270,6 @@
     width: 100%;
     box-shadow: none;
   }
-
-  .subtitle-text {
-    font-size: 12px;
-    line-height: 15px;
-    font-weight: 500;
-    top: 10px;
-    color: var(--spectrum-global-color-gray-600);
-    display: block;
-    margin-bottom: var(--spacing-s);
-  }
-
   .spectrum-Picker-label.auto-width {
     margin-right: var(--spacing-xs);
   }
@@ -373,11 +350,9 @@
   .option-extra.icon.field-icon {
     display: flex;
   }
-
   .option-tag {
     margin: 0 var(--spacing-m) 0 var(--spacing-m);
   }
-
   .option-tag :global(.spectrum-Tags-item > .spectrum-Icon) {
     margin-top: 2px;
   }
@@ -390,5 +365,14 @@
   }
   .loading--withAutocomplete {
     top: calc(34px + var(--spacing-m));
+  }
+
+  .subtitle-text {
+    font-size: 12px;
+    line-height: 15px;
+    font-weight: 500;
+    color: var(--spectrum-global-color-gray-600);
+    display: block;
+    margin-top: var(--spacing-s);
   }
 </style>

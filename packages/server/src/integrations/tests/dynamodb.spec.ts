@@ -1,5 +1,5 @@
+jest.mock("aws-sdk", () => require("./aws-sdk.mock"))
 import { default as DynamoDBIntegration } from "../dynamodb"
-jest.mock("aws-sdk")
 
 class TestConfiguration {
   integration: any
@@ -18,7 +18,7 @@ describe("DynamoDB Integration", () => {
   })
 
   it("calls the create method with the correct params", async () => {
-    const response = await config.integration.create({
+    await config.integration.create({
       table: tableName,
       json: {
         Name: "John",
@@ -65,7 +65,7 @@ describe("DynamoDB Integration", () => {
   })
 
   it("calls the get method with the correct params", async () => {
-    const response = await config.integration.get({
+    await config.integration.get({
       table: tableName,
       json: {
         Id: 123,
@@ -79,7 +79,7 @@ describe("DynamoDB Integration", () => {
   })
 
   it("calls the update method with the correct params", async () => {
-    const response = await config.integration.update({
+    await config.integration.update({
       table: tableName,
       json: {
         Name: "John",
@@ -92,7 +92,7 @@ describe("DynamoDB Integration", () => {
   })
 
   it("calls the delete method with the correct params", async () => {
-    const response = await config.integration.delete({
+    await config.integration.delete({
       table: tableName,
       json: {
         Name: "John",

@@ -1,4 +1,6 @@
 <script>
+  import ClientAppSkeleton from "@budibase/frontend-core/src/components/ClientAppSkeleton.svelte"
+
   export let title = ""
   export let favicon = ""
 
@@ -8,6 +10,14 @@
 
   export let clientLibPath
   export let usedPlugins
+  export let appMigrating
+
+  export let showSkeletonLoader = false
+  export let hideDevTools
+  export let sideNav
+  export let hideFooter
+
+  export let nonce
 </script>
 
 <svelte:head>
@@ -95,6 +105,9 @@
 </svelte:head>
 
 <body id="app">
+  {#if showSkeletonLoader}
+    <ClientAppSkeleton {hideDevTools} {sideNav} {hideFooter} />
+  {/if}
   <div id="error">
     {#if clientLibPath}
       <h1>There was an error loading your app</h1>
@@ -107,9 +120,14 @@
       <p />
     {/if}
   </div>
-  <script type="application/javascript">
+  <script type="application/javascript" {nonce}>
     window.INIT_TIME = Date.now()
   </script>
+  {#if appMigrating}
+    <script type="application/javascript" {nonce}>
+      window.MIGRATING_APP = true
+    </script>
+  {/if}
   <script type="application/javascript" src={clientLibPath}>
   </script>
   <!-- Custom components need inserted after the core client library -->
@@ -119,7 +137,7 @@
       <script type="application/javascript" src={plugin.jsUrl}></script>
     {/each}
   {/if}
-  <script type="application/javascript">
+  <script type="application/javascript" {nonce}>
     if (window.loadBudibase) {
       window.loadBudibase()
     } else {

@@ -1,34 +1,52 @@
-import { ValidFileExtensions } from "@budibase/shared-core"
-
-require("svelte/register")
-
+import { InvalidFileExtensions } from "@budibase/shared-core"
+import AppComponent from "./templates/BudibaseApp.svelte"
 import { join } from "../../../utilities/centralPath"
-import uuid from "uuid"
+import * as uuid from "uuid"
 import { ObjectStoreBuckets } from "../../../constants"
 import { processString } from "@budibase/string-templates"
 import {
   loadHandlebarsFile,
   NODE_MODULES_PATH,
+  shouldServeLocally,
   TOP_LEVEL_PATH,
 } from "../../../utilities/fileSystem"
 import env from "../../../environment"
-import { DocumentType } from "../../../db/utils"
 import {
+  BadRequestError,
+  configs,
   context,
   objectStore,
   utils,
-  configs,
-  BadRequestError,
 } from "@budibase/backend-core"
 import AWS from "aws-sdk"
 import fs from "fs"
 import sdk from "../../../sdk"
 import * as pro from "@budibase/pro"
-import { App, Ctx, ProcessAttachmentResponse, Upload } from "@budibase/types"
+import {
+  App,
+  Ctx,
+  DocumentType,
+  Feature,
+  GetSignedUploadUrlRequest,
+  GetSignedUploadUrlResponse,
+  ProcessAttachmentResponse,
+  ServeAppResponse,
+  ServeBuilderPreviewResponse,
+  ServeClientLibraryResponse,
+  ToggleBetaFeatureResponse,
+  UserCtx,
+} from "@budibase/types"
+import {
+  getAppMigrationVersion,
+  getLatestEnabledMigrationId,
+} from "../../../appMigrations"
 
-const send = require("koa-send")
+import send from "koa-send"
+import { getThemeVariables } from "../../../constants/themes"
 
-export const toggleBetaUiFeature = async function (ctx: Ctx) {
+export const toggleBetaUiFeature = async function (
+  ctx: Ctx<void, ToggleBetaFeatureResponse>
+) {
   const cookieName = `beta:${ctx.params.feature}`
 
   if (ctx.cookies.get(cookieName)) {
@@ -56,13 +74,13 @@ export const toggleBetaUiFeature = async function (ctx: Ctx) {
   }
 }
 
-export const serveBuilder = async function (ctx: Ctx) {
+export const serveBuilder = async function (ctx: Ctx<void, void>) {
   const builderPath = join(TOP_LEVEL_PATH, "builder")
   await send(ctx, ctx.file, { root: builderPath })
 }
 
 export const uploadFile = async function (
-  ctx: Ctx<{}, ProcessAttachmentResponse>
+  ctx: Ctx<void, ProcessAttachmentResponse>
 ) {
   const file = ctx.request?.files?.file
   if (!file) {
@@ -86,7 +104,10 @@ export const uploadFile = async function (
         )
       }
 
-      if (!env.SELF_HOSTED && !ValidFileExtensions.includes(extension)) {
+      if (
+        !env.SELF_HOSTED &&
+        InvalidFileExtensions.includes(extension.toLowerCase())
+      ) {
         throw new BadRequestError(
           `File "${file.name}" has an invalid extension: "${extension}"`
         )
@@ -115,14 +136,35 @@ export const uploadFile = async function (
   )
 }
 
-export const deleteObjects = async function (ctx: Ctx) {
-  ctx.body = await objectStore.deleteFiles(
-    ObjectStoreBuckets.APPS,
-    ctx.request.body.keys
-  )
+const requiresMigration = async (ctx: Ctx) => {
+  const appId = context.getAppId()
+  if (!appId) {
+    ctx.throw("AppId could not be found")
+  }
+
+  const latestMigration = getLatestEnabledMigrationId()
+  if (!latestMigration) {
+    return false
+  }
+
+  const latestMigrationApplied = await getAppMigrationVersion(appId)
+
+  return latestMigrationApplied !== latestMigration
 }
 
-export const serveApp = async function (ctx: Ctx) {
+export const serveApp = async function (ctx: UserCtx<void, ServeAppResponse>) {
+  if (ctx.url.includes("apple-touch-icon.png")) {
+    ctx.redirect("/builder/bblogo.png")
+    return
+  }
+  // no app ID found, cannot serve - return message instead
+  if (!context.getAppId()) {
+    ctx.body = "No content found - requires app ID"
+    return
+  }
+
+  const needMigrations = await requiresMigration(ctx)
+
   const bbHeaderEmbed =
     ctx.request.get("x-budibase-embed")?.toLowerCase() === "true"
 
@@ -139,19 +181,29 @@ export const serveApp = async function (ctx: Ctx) {
   try {
     db = context.getAppDB({ skip_setup: true })
     const appInfo = await db.get<any>(DocumentType.APP_METADATA)
+
     let appId = context.getAppId()
+    const hideDevTools = !!ctx.params.appUrl
+    const sideNav = appInfo.navigation.navigation === "Left"
+    const hideFooter =
+      ctx?.user?.license?.features?.includes(Feature.BRANDING) || false
+    const themeVariables = getThemeVariables(appInfo?.theme)
 
     if (!env.isJest()) {
-      const App = require("./templates/BudibaseApp.svelte").default
       const plugins = objectStore.enrichPluginURLs(appInfo.usedPlugins)
-      const { head, html, css } = App.render({
+
+      const { head, html, css } = AppComponent.render({
+        title: branding?.platformTitle || `${appInfo.name}`,
+        showSkeletonLoader: appInfo.features?.skeletonLoader ?? false,
+        hideDevTools,
+        sideNav,
+        hideFooter,
         metaImage:
           branding?.metaImageUrl ||
           "https://res.cloudinary.com/daog6scxm/image/upload/v1698759482/meta-images/plain-branded-meta-image-coral_ocxmgu.png",
         metaDescription: branding?.metaDescription || "",
         metaTitle:
           branding?.metaTitle || `${appInfo.name} - built with Budibase`,
-        title: appInfo.name,
         production: env.isProd(),
         appId,
         clientLibPath: objectStore.clientLibraryUrl(appId!, appInfo.version),
@@ -164,14 +216,17 @@ export const serveApp = async function (ctx: Ctx) {
           config?.logoUrl !== ""
             ? objectStore.getGlobalFileUrl("settings", "logoUrl")
             : "",
+        appMigrating: needMigrations,
+        nonce: ctx.state.nonce,
       })
       const appHbs = loadHandlebarsFile(appHbsPath)
       ctx.body = await processString(appHbs, {
         head,
         body: html,
-        style: css.code,
+        css: `:root{${themeVariables}} ${css.code}`,
         appId,
         embedded: bbHeaderEmbed,
+        nonce: ctx.state.nonce,
       })
     } else {
       // just return the app info for jest to assert on
@@ -179,8 +234,7 @@ export const serveApp = async function (ctx: Ctx) {
     }
   } catch (error) {
     if (!env.isJest()) {
-      const App = require("./templates/BudibaseApp.svelte").default
-      const { head, html, css } = App.render({
+      const { head, html, css } = AppComponent.render({
         title: branding?.metaTitle,
         metaTitle: branding?.metaTitle,
         metaImage:
@@ -203,15 +257,20 @@ export const serveApp = async function (ctx: Ctx) {
   }
 }
 
-export const serveBuilderPreview = async function (ctx: Ctx) {
+export const serveBuilderPreview = async function (
+  ctx: Ctx<void, ServeBuilderPreviewResponse>
+) {
   const db = context.getAppDB({ skip_setup: true })
   const appInfo = await db.get<App>(DocumentType.APP_METADATA)
 
   if (!env.isJest()) {
     let appId = context.getAppId()
-    const previewHbs = loadHandlebarsFile(`${__dirname}/preview.hbs`)
+    const templateLoc = join(__dirname, "templates")
+    const previewLoc = fs.existsSync(templateLoc) ? templateLoc : __dirname
+    const previewHbs = loadHandlebarsFile(join(previewLoc, "preview.hbs"))
     ctx.body = await processString(previewHbs, {
       clientLibPath: objectStore.clientLibraryUrl(appId!, appInfo.version),
+      nonce: ctx.state.nonce,
     })
   } else {
     // just return the app info for jest to assert on
@@ -219,30 +278,40 @@ export const serveBuilderPreview = async function (ctx: Ctx) {
   }
 }
 
-export const serveClientLibrary = async function (ctx: Ctx) {
+export const serveClientLibrary = async function (
+  ctx: Ctx<void, ServeClientLibraryResponse>
+) {
+  const version = ctx.request.query.version
+
+  if (Array.isArray(version)) {
+    ctx.throw(400)
+  }
+
   const appId = context.getAppId() || (ctx.request.query.appId as string)
   let rootPath = join(NODE_MODULES_PATH, "@budibase", "client", "dist")
   if (!appId) {
     ctx.throw(400, "No app ID provided - cannot fetch client library.")
   }
-  if (env.isProd()) {
+
+  const serveLocally = shouldServeLocally(version || "")
+  if (!serveLocally) {
     ctx.body = await objectStore.getReadStream(
       ObjectStoreBuckets.APPS,
       objectStore.clientLibraryPath(appId!)
     )
     ctx.set("Content-Type", "application/javascript")
-  } else if (env.isDev()) {
+  } else {
     // incase running from TS directly
     const tsPath = join(require.resolve("@budibase/client"), "..")
     return send(ctx, "budibase-client.js", {
       root: !fs.existsSync(rootPath) ? tsPath : rootPath,
     })
-  } else {
-    ctx.throw(500, "Unable to retrieve client library.")
   }
 }
 
-export const getSignedUploadURL = async function (ctx: Ctx) {
+export const getSignedUploadURL = async function (
+  ctx: Ctx<GetSignedUploadUrlRequest, GetSignedUploadUrlResponse>
+) {
   // Ensure datasource is valid
   let datasource
   try {
@@ -255,11 +324,6 @@ export const getSignedUploadURL = async function (ctx: Ctx) {
     ctx.throw(400, "The specified datasource could not be found")
   }
 
-  // Ensure we aren't using a custom endpoint
-  if (datasource?.config?.endpoint) {
-    ctx.throw(400, "S3 datasources with custom endpoints are not supported")
-  }
-
   // Determine type of datasource and generate signed URL
   let signedUrl
   let publicUrl
@@ -268,11 +332,11 @@ export const getSignedUploadURL = async function (ctx: Ctx) {
     const { bucket, key } = ctx.request.body || {}
     if (!bucket || !key) {
       ctx.throw(400, "bucket and key values are required")
-      return
     }
     try {
       const s3 = new AWS.S3({
         region: awsRegion,
+        endpoint: datasource?.config?.endpoint || undefined,
         accessKeyId: datasource?.config?.accessKeyId as string,
         secretAccessKey: datasource?.config?.secretAccessKey as string,
         apiVersion: "2006-03-01",
@@ -280,7 +344,11 @@ export const getSignedUploadURL = async function (ctx: Ctx) {
       })
       const params = { Bucket: bucket, Key: key }
       signedUrl = s3.getSignedUrl("putObject", params)
-      publicUrl = `https://${bucket}.s3.${awsRegion}.amazonaws.com/${key}`
+      if (datasource?.config?.endpoint) {
+        publicUrl = `${datasource.config.endpoint}/${bucket}/${key}`
+      } else {
+        publicUrl = `https://${bucket}.s3.${awsRegion}.amazonaws.com/${key}`
+      }
     } catch (error: any) {
       ctx.throw(400, error)
     }

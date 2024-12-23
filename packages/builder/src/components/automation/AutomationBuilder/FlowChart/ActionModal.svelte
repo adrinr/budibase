@@ -9,32 +9,56 @@
     Tags,
     Tag,
   } from "@budibase/bbui"
-  import { automationStore, selectedAutomation } from "builderStore"
+  import { AutomationActionStepId } from "@budibase/types"
+  import { automationStore, selectedAutomation } from "stores/builder"
   import { admin, licensing } from "stores/portal"
   import { externalActions } from "./ExternalActions"
   import { TriggerStepID, ActionStepID } from "constants/backend/automations"
-  import { checkForCollectStep } from "builderStore/utils"
 
-  export let blockIdx
-  export let lastStep
+  export let block
+  export let modal
 
   let syncAutomationsEnabled = $licensing.syncAutomationsEnabled
+  let triggerAutomationRunEnabled = $licensing.triggerAutomationRunEnabled
   let collectBlockAllowedSteps = [TriggerStepID.APP, TriggerStepID.WEBHOOK]
   let selectedAction
-  let actionVal
-  let actions = Object.entries($automationStore.blockDefinitions.ACTION)
+  let actions = Object.entries($automationStore.blockDefinitions.ACTION).filter(
+    entry => {
+      const [key] = entry
+      return key !== AutomationActionStepId.BRANCH
+    }
+  )
+  let lockedFeatures = [
+    ActionStepID.COLLECT,
+    ActionStepID.TRIGGER_AUTOMATION_RUN,
+  ]
 
-  $: collectBlockExists = checkForCollectStep($selectedAutomation)
+  $: blockRef = $selectedAutomation.blockRefs?.[block.id]
+  $: lastStep = blockRef?.terminating
+  $: pathSteps = block.id
+    ? automationStore.actions.getPathSteps(
+        blockRef.pathTo,
+        $selectedAutomation?.data
+      )
+    : []
+
+  $: collectBlockExists = pathSteps?.some(
+    step => step.stepId === ActionStepID.COLLECT
+  )
 
   const disabled = () => {
     return {
       SEND_EMAIL_SMTP: {
-        disabled: !$admin.checklist.smtp.checked,
+        disabled: !$admin.checklist?.smtp?.checked,
         message: "Please configure SMTP",
       },
       COLLECT: {
         disabled: !lastStep || !syncAutomationsEnabled || collectBlockExists,
         message: collectDisabledMessage(),
+      },
+      TRIGGER_AUTOMATION_RUN: {
+        disabled: !triggerAutomationRunEnabled,
+        message: "Please upgrade to a paid plan",
       },
     }
   }
@@ -66,7 +90,7 @@
     // Filter out Collect block if not App Action or Webhook
     if (
       !collectBlockAllowedSteps.includes(
-        $selectedAutomation.definition.trigger.stepId
+        $selectedAutomation.data.definition.trigger.stepId
       )
     ) {
       delete acc.COLLECT
@@ -82,31 +106,36 @@
     return acc
   }, {})
 
-  const selectAction = action => {
-    actionVal = action
+  const selectAction = async action => {
     selectedAction = action.name
-  }
 
-  async function addBlockToAutomation() {
     try {
       const newBlock = automationStore.actions.constructBlock(
         "ACTION",
-        actionVal.stepId,
-        actionVal
+        action.stepId,
+        action
       )
-      await automationStore.actions.addBlockToAutomation(newBlock, blockIdx + 1)
+
+      await automationStore.actions.addBlockToAutomation(
+        newBlock,
+        blockRef ? blockRef.pathTo : block.pathTo
+      )
+      modal.hide()
     } catch (error) {
+      console.error(error)
       notifications.error("Error saving automation")
     }
   }
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <ModalContent
   title="Add automation step"
-  confirmText="Save"
   size="L"
+  showConfirmButton={false}
+  showCancelButton={false}
   disabled={!selectedAction}
-  onConfirm={addBlockToAutomation}
 >
   <Layout noPadding gap="XS">
     <Detail size="S">Apps</Detail>
@@ -119,10 +148,10 @@
         >
           <div class="item-body">
             <img
-              width="20"
-              height="20"
+              width={20}
+              height={20}
               src={externalActions[action.stepId].icon}
-              alt="zapier"
+              alt={externalActions[action.stepId].name}
             />
             <span class="icon-spacing">
               <Body size="XS">
@@ -149,10 +178,10 @@
           <div class="item-body">
             <Icon name={action.icon} />
             <Body size="XS">{action.name}</Body>
-            {#if isDisabled && !syncAutomationsEnabled && action.stepId === ActionStepID.COLLECT}
+            {#if isDisabled && !syncAutomationsEnabled && !triggerAutomationRunEnabled && lockedFeatures.includes(action.stepId)}
               <div class="tag-color">
                 <Tags>
-                  <Tag icon="LockClosed">Business</Tag>
+                  <Tag icon="LockClosed">Premium</Tag>
                 </Tags>
               </div>
             {:else if isDisabled}

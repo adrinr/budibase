@@ -1,7 +1,8 @@
 import tk from "timekeeper"
 import _ from "lodash"
-import { mocks, structures } from "@budibase/backend-core/tests"
+import { generator, mocks, structures } from "@budibase/backend-core/tests"
 import {
+  CloudAccount,
   ScimCreateUserRequest,
   ScimGroupResponse,
   ScimUpdateRequest,
@@ -10,20 +11,20 @@ import {
 import { TestConfiguration } from "../../../../tests"
 import { events } from "@budibase/backend-core"
 
-// this test can 409 - retries reduce issues with this
-jest.retryTimes(2, { logErrorsBeforeRetry: true })
 jest.setTimeout(30000)
 
-mocks.licenses.useScimIntegration()
-
 describe("scim", () => {
-  beforeEach(async () => {
+  async function setup() {
     jest.resetAllMocks()
     tk.freeze(mocks.date.MOCK_DATE)
     mocks.licenses.useScimIntegration()
+    mocks.licenses.useGroups()
 
     await config.setSCIMConfig(true)
-  })
+  }
+
+  beforeAll(setup)
+  beforeEach(setup)
 
   const config = new TestConfiguration()
 
@@ -303,7 +304,7 @@ describe("scim", () => {
 
           await postScimUser({ body })
 
-          expect(events.user.created).toBeCalledTimes(1)
+          expect(events.user.created).toHaveBeenCalledTimes(1)
         })
 
         it("if the username is an email, the user name will be used as email", async () => {
@@ -362,13 +363,77 @@ describe("scim", () => {
         })
       })
 
-      it("creating an existing user name returns a conflict", async () => {
-        const body = structures.scim.createUserRequest()
+      it("creating an external user that conflicts an internal one syncs the existing user", async () => {
+        const { body: internalUser } = await config.api.users.saveUser(
+          structures.users.user()
+        )
 
-        await postScimUser({ body })
+        const scimUserData = {
+          externalId: structures.uuid(),
+          email: internalUser.email,
+          firstName: structures.generator.first(),
+          lastName: structures.generator.last(),
+          username: structures.generator.name(),
+        }
+        const scimUserRequest = structures.scim.createUserRequest(scimUserData)
 
-        const res = await postScimUser({ body }, { expect: 409 })
-        expect((res as any).message).toBe("Email already in use")
+        const res = await postScimUser(
+          { body: scimUserRequest },
+          { expect: 200 }
+        )
+
+        const expectedScimUser: ScimUserResponse = {
+          schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
+          id: internalUser._id!,
+          externalId: scimUserRequest.externalId,
+          meta: {
+            resourceType: "User",
+            // @ts-ignore
+            created: mocks.date.MOCK_DATE.toISOString(),
+            // @ts-ignore
+            lastModified: mocks.date.MOCK_DATE.toISOString(),
+          },
+          userName: scimUserData.username,
+          name: {
+            formatted: `${scimUserData.firstName} ${scimUserData.lastName}`,
+            familyName: scimUserData.lastName,
+            givenName: scimUserData.firstName,
+          },
+          active: true,
+          emails: [
+            {
+              value: internalUser.email,
+              type: "work",
+              primary: true,
+            },
+          ],
+        }
+
+        expect(res).toEqual(expectedScimUser)
+      })
+
+      it("a user cannot be SCIM synchronised with another SCIM user", async () => {
+        const { body: internalUser } = await config.api.users.saveUser(
+          structures.users.user()
+        )
+
+        await postScimUser(
+          {
+            body: structures.scim.createUserRequest({
+              email: internalUser.email,
+            }),
+          },
+          { expect: 200 }
+        )
+
+        await postScimUser(
+          {
+            body: structures.scim.createUserRequest({
+              email: internalUser.email,
+            }),
+          },
+          { expect: 409 }
+        )
       })
     })
 
@@ -394,10 +459,11 @@ describe("scim", () => {
       it("should return 404 when requesting unexisting user id", async () => {
         const response = await findScimUser(structures.uuid(), { expect: 404 })
 
-        expect(response).toEqual({
-          message: "missing",
-          status: 404,
-        })
+        expect(response).toEqual(
+          expect.objectContaining({
+            status: 404,
+          })
+        )
       })
     })
 
@@ -506,7 +572,42 @@ describe("scim", () => {
 
         await patchScimUser({ id: user.id, body })
 
-        expect(events.user.updated).toBeCalledTimes(1)
+        expect(events.user.updated).toHaveBeenCalledTimes(1)
+      })
+
+      it("an existing user's email can be updated", async () => {
+        const newEmail = structures.generator.email()
+        const body: ScimUpdateRequest = {
+          schemas: ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+          Operations: [
+            {
+              op: "Replace",
+              path: 'emails[type eq "work"].value',
+              value: newEmail,
+            },
+          ],
+        }
+
+        const response = await patchScimUser({ id: user.id, body })
+
+        const expectedScimUser: ScimUserResponse = {
+          ...user,
+          emails: [
+            {
+              value: newEmail,
+              type: "work",
+              primary: true,
+            },
+          ],
+        }
+        expect(response).toEqual(expectedScimUser)
+
+        const persistedUser = await config.api.scimUsersAPI.find(user.id)
+        expect(persistedUser).toEqual(expectedScimUser)
+
+        expect((await config.api.users.getUser(user.id)).body).toEqual(
+          expect.objectContaining({ _id: user.id, email: newEmail })
+        )
       })
     })
 
@@ -538,7 +639,26 @@ describe("scim", () => {
       it("an event is dispatched", async () => {
         await deleteScimUser(user.id, { expect: 204 })
 
-        expect(events.user.deleted).toBeCalledTimes(1)
+        expect(events.user.deleted).toHaveBeenCalledTimes(1)
+      })
+
+      it("an account holder cannot be removed even when synched", async () => {
+        const account: CloudAccount = {
+          ...structures.accounts.account(),
+          budibaseUserId: user.id,
+          email: user.emails![0].value,
+        }
+        mocks.accounts.getAccount.mockResolvedValue(account)
+
+        await deleteScimUser(user.id, {
+          expect: {
+            message: "Account holder cannot be deleted",
+            status: 400,
+            error: { code: "http" },
+          },
+        })
+
+        await config.api.scimUsersAPI.find(user.id, { expect: 200 })
       })
     })
   })
@@ -570,8 +690,15 @@ describe("scim", () => {
         beforeAll(async () => {
           groups = []
 
-          for (let i = 0; i < groupCount; i++) {
-            const body = structures.scim.createGroupRequest()
+          const groupNames = generator.unique(
+            () => generator.word(),
+            groupCount
+          )
+
+          for (const groupName of groupNames) {
+            const body = structures.scim.createGroupRequest({
+              displayName: groupName,
+            })
             groups.push(await config.api.scimGroupsAPI.post({ body }))
           }
 
@@ -642,6 +769,25 @@ describe("scim", () => {
             totalResults: groupCount,
           })
         })
+
+        it("can fetch groups even if internal groups exist", async () => {
+          await config.api.groups.saveGroup(structures.userGroups.userGroup())
+          await config.api.groups.saveGroup(structures.userGroups.userGroup())
+
+          const response = await getScimGroups()
+
+          expect(response).toEqual({
+            Resources: expect.arrayContaining(groups),
+            itemsPerPage: 25,
+            schemas: ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+            startIndex: 1,
+            totalResults: groupCount,
+          })
+
+          expect((await config.api.groups.fetch()).body.data).toHaveLength(
+            25 + 2 // scim groups + internal groups
+          )
+        })
       })
     })
 
@@ -690,6 +836,43 @@ describe("scim", () => {
           )
         })
       })
+
+      it("creating an external group that conflicts an internal one syncs the existing group", async () => {
+        const groupToSave = structures.userGroups.userGroup()
+        const { body: internalGroup } = await config.api.groups.saveGroup(
+          groupToSave
+        )
+
+        const scimGroupData = {
+          externalId: structures.uuid(),
+          displayName: groupToSave.name,
+        }
+
+        const res = await postScimGroup(
+          { body: structures.scim.createGroupRequest(scimGroupData) },
+          { expect: 200 }
+        )
+
+        expect(res).toEqual(
+          expect.objectContaining({
+            id: internalGroup._id!,
+            externalId: scimGroupData.externalId,
+            displayName: scimGroupData.displayName,
+          })
+        )
+      })
+
+      it("a group cannot be SCIM synchronised with another SCIM group", async () => {
+        const groupToSave = structures.userGroups.userGroup()
+        await config.api.groups.saveGroup(groupToSave)
+
+        const createGroupRequest = structures.scim.createGroupRequest({
+          displayName: groupToSave.name,
+        })
+        await postScimGroup({ body: createGroupRequest }, { expect: 200 })
+
+        await postScimGroup({ body: createGroupRequest }, { expect: 409 })
+      })
     })
 
     describe("GET /api/global/scim/v2/groups/:id", () => {
@@ -714,10 +897,11 @@ describe("scim", () => {
       it("should return 404 when requesting unexisting group id", async () => {
         const response = await findScimGroup(structures.uuid(), { expect: 404 })
 
-        expect(response).toEqual({
-          message: "missing",
-          status: 404,
-        })
+        expect(response).toEqual(
+          expect.objectContaining({
+            status: 404,
+          })
+        )
       })
 
       it("should allow excluding members", async () => {

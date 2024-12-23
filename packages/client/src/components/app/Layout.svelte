@@ -2,21 +2,21 @@
   import { getContext, setContext } from "svelte"
   import { writable } from "svelte/store"
   import { Heading, Icon, clickOutside } from "@budibase/bbui"
-  import { FieldTypes } from "constants"
   import { Constants } from "@budibase/frontend-core"
-  import active from "svelte-spa-router/active"
+  import NavItem from "./NavItem.svelte"
 
   const sdk = getContext("sdk")
   const {
     routeStore,
     roleStore,
-    styleable,
     linkable,
     builderStore,
     sidePanelStore,
+    modalStore,
+    appStore,
   } = sdk
-  const component = getContext("component")
   const context = getContext("context")
+  const navStateStore = writable({})
 
   // Legacy props which must remain unchanged for backwards compatibility
   export let title
@@ -33,7 +33,9 @@
   export let navTextColor
   export let navWidth
   export let pageWidth
-
+  export let logoLinkUrl
+  export let openLogoLinkInNewTab
+  export let textAlign
   export let embedded = false
 
   const NavigationClasses = {
@@ -61,7 +63,7 @@
   })
   setContext("layout", store)
 
-  $: validLinks = getValidLinks(links, $roleStore)
+  $: enrichedNavItems = enrichNavItems(links, $roleStore)
   $: typeClass = NavigationClasses[navigation] || NavigationClasses.None
   $: navWidthClass = WidthClasses[navWidth || width] || WidthClasses.Large
   $: pageWidthClass = WidthClasses[pageWidth || width] || WidthClasses.Large
@@ -71,7 +73,11 @@
     $context.device.width,
     $context.device.height
   )
-  $: autoCloseSidePanel = !$builderStore.inBuilder && $sidePanelStore.open
+  $: autoCloseSidePanel =
+    !$builderStore.inBuilder &&
+    $sidePanelStore.open &&
+    !$sidePanelStore.ignoreClicksOutside
+
   $: screenId = $builderStore.inBuilder
     ? `${$builderStore.screen?._id}-screen`
     : "screen"
@@ -99,26 +105,55 @@
     }
   }
 
-  const getValidLinks = (allLinks, userRoleHierarchy) => {
-    // Strip links missing required info
-    let validLinks = (allLinks || []).filter(link => link.text && link.url)
-    // Filter to only links allowed by the current role
-    return validLinks.filter(link => {
-      const role = link.roleId || Constants.Roles.BASIC
-      return userRoleHierarchy?.find(roleId => roleId === role)
-    })
+  const enrichNavItem = navItem => {
+    const internalLink = isInternal(navItem.url)
+    return {
+      ...navItem,
+      internalLink,
+      url: internalLink ? navItem.url : ensureExternal(navItem.url),
+    }
+  }
+
+  const enrichNavItems = (navItems, userRoleHierarchy) => {
+    if (!navItems?.length) {
+      return []
+    }
+    return navItems
+      .filter(navItem => {
+        // Strip nav items without text
+        if (!navItem.text) {
+          return false
+        }
+
+        // Strip out links without URLs
+        if (navItem.type !== "sublinks" && !navItem.url) {
+          return false
+        }
+
+        // Filter to only links allowed by the current role
+        const role = navItem.roleId || Constants.Roles.BASIC
+        return userRoleHierarchy?.find(roleId => roleId === role)
+      })
+      .map(navItem => {
+        const enrichedNavItem = enrichNavItem(navItem)
+        if (navItem.type === "sublinks" && navItem.subLinks?.length) {
+          enrichedNavItem.subLinks = navItem.subLinks
+            .filter(subLink => subLink.text && subLink.url)
+            .map(enrichNavItem)
+        }
+        return enrichedNavItem
+      })
   }
 
   const isInternal = url => {
-    return url.startsWith("/")
+    return url?.startsWith("/")
   }
 
   const ensureExternal = url => {
+    if (!url?.length) {
+      return url
+    }
     return !url.startsWith("http") ? `http://${url}` : url
-  }
-
-  const close = () => {
-    mobileOpen = false
   }
 
   const navigateToPortal = () => {
@@ -150,18 +185,35 @@
     }
     return style
   }
+
+  const getSanitizedUrl = (url, openInNewTab) => {
+    if (!isInternal(url)) {
+      return ensureExternal(url)
+    }
+    if (openInNewTab) {
+      return `#${url}`
+    }
+    return url
+  }
+
+  const handleClickLink = () => {
+    mobileOpen = false
+    sidePanelStore.actions.close()
+    modalStore.actions.close()
+  }
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <div
-  class="component {screenId} layout layout--{typeClass}"
-  use:styleable={$component.styles}
+  class="component layout layout--{typeClass}"
   class:desktop={!mobile}
   class:mobile={!!mobile}
   data-id={screenId}
   data-name="Screen"
   data-icon="WebPage"
 >
-  <div class="{screenId}-dom screen-wrapper layout-body">
+  <div class="screen-wrapper layout-body">
     {#if typeClass !== "none"}
       <div
         class="interactive component {navigationId}"
@@ -181,7 +233,7 @@
         >
           <div class="nav nav--{typeClass} size--{navWidthClass}">
             <div class="nav-header">
-              {#if validLinks?.length}
+              {#if enrichedNavItems.length}
                 <div class="burger">
                   <Icon
                     hoverable
@@ -192,15 +244,36 @@
               {/if}
               <div class="logo">
                 {#if !hideLogo}
-                  <img src={logoUrl || "/builder/bblogo.png"} alt={title} />
+                  {#if logoLinkUrl && isInternal(logoLinkUrl) && !openLogoLinkInNewTab}
+                    <a
+                      href={getSanitizedUrl(logoLinkUrl, openLogoLinkInNewTab)}
+                      use:linkable
+                    >
+                      <img src={logoUrl || "/builder/bblogo.png"} alt={title} />
+                    </a>
+                  {:else if logoLinkUrl}
+                    <a
+                      target={openLogoLinkInNewTab ? "_blank" : "_self"}
+                      href={getSanitizedUrl(logoLinkUrl, openLogoLinkInNewTab)}
+                    >
+                      <img src={logoUrl || "/builder/bblogo.png"} alt={title} />
+                    </a>
+                  {:else}
+                    <img src={logoUrl || "/builder/bblogo.png"} alt={title} />
+                  {/if}
                 {/if}
                 {#if !hideTitle && title}
-                  <Heading size="S">{title}</Heading>
+                  <Heading size="S" {textAlign}>{title}</Heading>
                 {/if}
               </div>
               {#if !embedded}
                 <div class="portal">
-                  <Icon hoverable name="Apps" on:click={navigateToPortal} />
+                  <Icon
+                    hoverable
+                    name="Apps"
+                    on:click={navigateToPortal}
+                    disabled={$appStore.isDevApp}
+                  />
                 </div>
               {/if}
             </div>
@@ -209,28 +282,20 @@
               class:visible={mobileOpen}
               on:click={() => (mobileOpen = false)}
             />
-            {#if validLinks?.length}
+            {#if enrichedNavItems.length}
               <div class="links" class:visible={mobileOpen}>
-                {#each validLinks as { text, url }}
-                  {#if isInternal(url)}
-                    <a
-                      class={FieldTypes.LINK}
-                      href={url}
-                      use:linkable
-                      on:click={close}
-                      use:active={url}
-                    >
-                      {text}
-                    </a>
-                  {:else}
-                    <a
-                      class={FieldTypes.LINK}
-                      href={ensureExternal(url)}
-                      on:click={close}
-                    >
-                      {text}
-                    </a>
-                  {/if}
+                {#each enrichedNavItems as navItem}
+                  <NavItem
+                    type={navItem.type}
+                    text={navItem.text}
+                    url={navItem.url}
+                    subLinks={navItem.subLinks}
+                    internalLink={navItem.internalLink}
+                    on:clickLink={handleClickLink}
+                    leftNav={navigation === "Left"}
+                    {mobile}
+                    {navStateStore}
+                  />
                 {/each}
                 <div class="close">
                   <Icon
@@ -245,7 +310,14 @@
         </div>
       </div>
     {/if}
-    <div class="main-wrapper">
+    <div
+      class="main-wrapper"
+      on:click={() => {
+        if ($builderStore.inBuilder) {
+          builderStore.actions.selectComponent(screenId)
+        }
+      }}
+    >
       <div class="main size--{pageWidthClass}">
         <slot />
       </div>
@@ -266,6 +338,7 @@
       />
     </div>
   </div>
+  <div class="modal-container" />
 </div>
 
 <style>
@@ -280,6 +353,9 @@
     z-index: 1;
     overflow: hidden;
     position: relative;
+
+    /* Deliberately unitless as we need to do unitless calculations in grids */
+    --grid-spacing: 4;
   }
   .component {
     display: contents;
@@ -342,7 +418,6 @@
     color: var(--navTextColor);
     opacity: 1;
   }
-
   .nav :global(h1) {
     color: var(--navTextColor);
   }
@@ -408,9 +483,10 @@
     position: relative;
     padding: 32px;
   }
-  .main.size--max {
-    padding: 0;
+  .main:not(.size--max):has(.screenslot-dom > .component > .grid) {
+    padding: calc(32px - var(--grid-spacing) * 2px);
   }
+
   .layout--none .main {
     padding: 0;
   }
@@ -428,6 +504,9 @@
   }
   .size--max {
     width: 100%;
+  }
+  .main.size--max {
+    padding: 0;
   }
 
   /*  Nav components */
@@ -464,21 +543,6 @@
     align-items: center;
     gap: var(--spacing-xl);
     margin-top: var(--spacing-xl);
-  }
-  .link {
-    opacity: 0.75;
-    color: var(--navTextColor);
-    font-size: var(--spectrum-global-dimension-font-size-200);
-    font-weight: 600;
-    transition: color 130ms ease-out;
-  }
-  .link.active {
-    opacity: 1;
-  }
-  .link:hover {
-    opacity: 1;
-    text-decoration: underline;
-    text-underline-position: under;
   }
   .close {
     display: none;
@@ -554,6 +618,10 @@
   /* Reduce padding */
   .mobile:not(.layout--none) .main {
     padding: 16px;
+  }
+  .mobile:not(.layout--none)
+    .main:not(.size--max):has(.screenslot-dom > .component > .grid) {
+    padding: 6px;
   }
   .mobile .main.size--max {
     padding: 0;

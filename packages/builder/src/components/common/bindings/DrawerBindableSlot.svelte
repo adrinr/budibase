@@ -3,11 +3,12 @@
   import {
     readableToRuntimeBinding,
     runtimeToReadableBinding,
-  } from "builderStore/dataBinding"
+  } from "dataBinding"
+  import { FieldType } from "@budibase/types"
 
   import ClientBindingPanel from "components/common/bindings/ClientBindingPanel.svelte"
   import { createEventDispatcher, setContext } from "svelte"
-  import { isJSBinding } from "@budibase/string-templates"
+  import { isJSBinding, findHBSBlocks } from "@budibase/string-templates"
 
   export let panel = ClientBindingPanel
   export let value = ""
@@ -16,18 +17,21 @@
   export let placeholder
   export let label
   export let disabled = false
-  export let fillWidth
   export let allowJS = true
   export let allowHelpers = true
   export let updateOnChange = true
-  export let drawerLeft
   export let type
   export let schema
 
   const dispatch = createEventDispatcher()
   let bindingDrawer
-  let valid = true
   let currentVal = value
+
+  let attachmentTypes = [
+    FieldType.ATTACHMENT_SINGLE,
+    FieldType.ATTACHMENTS,
+    FieldType.SIGNATURE_SINGLE,
+  ]
 
   $: readableValue = runtimeToReadableBinding(bindings, value)
   $: tempValue = readableValue
@@ -44,7 +48,11 @@
   })
 
   const onChange = value => {
-    if (type === "link" && value && hasValidLinks(value)) {
+    if (
+      (type === "link" || type === "bb_reference") &&
+      value &&
+      hasValidLinks(value)
+    ) {
       currentVal = value.split(",")
     } else if (type === "array" && value && hasValidOptions(value)) {
       currentVal = value.split(",")
@@ -95,10 +103,16 @@
     date: isValidDate,
     datetime: isValidDate,
     link: hasValidLinks,
+    bb_reference: hasValidLinks,
+    bb_reference_single: hasValidLinks,
     array: hasValidOptions,
     longform: value => !isJSBinding(value),
     json: value => !isJSBinding(value),
+    options: value => !isJSBinding(value) && !findHBSBlocks(value)?.length,
     boolean: isValidBoolean,
+    attachment: false,
+    attachment_single: false,
+    signature_single: false,
   }
 
   const isValid = value => {
@@ -113,13 +127,25 @@
     if (type === "json" && !isJSBinding(value)) {
       return "json-slot-icon"
     }
-    if (type !== "string" && type !== "number") {
+    if (
+      ![
+        "string",
+        "number",
+        "bigint",
+        "barcodeqr",
+        "attachment",
+        "signature_single",
+        "attachment_single",
+      ].includes(type)
+    ) {
       return "slot-icon"
     }
     return ""
   }
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="control" class:disabled>
   {#if !isValid(value)}
     <Input
@@ -143,16 +169,9 @@
       <Icon disabled={isJS} size="S" name="Close" />
     </div>
   {:else}
-    <slot
-      {label}
-      {disabled}
-      readonly={isJS}
-      value={isJS ? "(JavaScript function)" : readableValue}
-      {placeholder}
-      {updateOnChange}
-    />
+    <slot />
   {/if}
-  {#if !disabled && type !== "formula"}
+  {#if !disabled && type !== "formula" && !disabled && !attachmentTypes.includes(type)}
     <div
       class={`icon ${getIconClass(value, type)}`}
       on:click={() => {
@@ -166,22 +185,14 @@
 <Drawer
   on:drawerHide
   on:drawerShow
-  {fillWidth}
   bind:this={bindingDrawer}
-  {title}
-  left={drawerLeft}
-  headless
+  title={title ?? placeholder ?? "Bindings"}
+  forceModal={true}
 >
-  <svelte:fragment slot="description">
-    Add the objects on the left to enrich your text.
-  </svelte:fragment>
-  <Button cta slot="buttons" disabled={!valid} on:click={saveBinding}>
-    Save
-  </Button>
+  <Button cta slot="buttons" on:click={saveBinding}>Save</Button>
   <svelte:component
     this={panel}
     slot="body"
-    bind:valid
     value={readableValue}
     on:change={event => (tempValue = event.detail)}
     {bindings}

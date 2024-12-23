@@ -1,40 +1,30 @@
-export const getColor = (idx, opacity = 0.3) => {
-  if (idx == null || idx === -1) {
-    idx = 0
+import { GeneratedIDPrefix, CellIDSeparator } from "./constants"
+import { Helpers } from "@budibase/bbui"
+
+export const parseCellID = cellId => {
+  if (!cellId) {
+    return { rowId: undefined, field: undefined }
   }
-  return `hsla(${((idx + 1) * 222) % 360}, 90%, 75%, ${opacity})`
+  const parts = cellId.split(CellIDSeparator)
+  const field = parts.pop()
+  return { rowId: parts.join(CellIDSeparator), field }
 }
 
-const TypeIconMap = {
-  text: "Text",
-  options: "Dropdown",
-  datetime: "Date",
-  barcodeqr: "Camera",
-  longform: "TextAlignLeft",
-  array: "Dropdown",
-  number: "123",
-  boolean: "Boolean",
-  attachment: "AppleFiles",
-  link: "DataCorrelated",
-  formula: "Calculator",
-  json: "Brackets",
-  bigint: "TagBold",
-  bb_reference: {
-    user: "User",
-    users: "UserGroup",
-  },
+export const getCellID = (rowId, fieldName) => {
+  return `${rowId}${CellIDSeparator}${fieldName}`
 }
 
-export const getColumnIcon = column => {
-  if (column.schema.autocolumn) {
-    return "MagicWand"
+export const parseEventLocation = e => {
+  return {
+    x: e.clientX ?? e.touches?.[0]?.clientX,
+    y: e.clientY ?? e.touches?.[0]?.clientY,
   }
-  const { type, subtype } = column.schema
+}
 
-  const result =
-    typeof TypeIconMap[type] === "object" && subtype
-      ? TypeIconMap[type][subtype]
-      : TypeIconMap[type]
+export const generateRowID = () => {
+  return `${GeneratedIDPrefix}${Helpers.uuid()}`
+}
 
-  return result || "Text"
+export const isGeneratedRowID = id => {
+  return id?.startsWith(GeneratedIDPrefix)
 }

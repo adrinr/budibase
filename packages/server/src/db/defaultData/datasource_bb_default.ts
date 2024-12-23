@@ -1,10 +1,8 @@
 import {
-  AutoFieldSubTypes,
-  FieldTypes,
   DEFAULT_BB_DATASOURCE_ID,
-  DEFAULT_INVENTORY_TABLE_ID,
   DEFAULT_EMPLOYEE_TABLE_ID,
   DEFAULT_EXPENSES_TABLE_ID,
+  DEFAULT_INVENTORY_TABLE_ID,
   DEFAULT_JOBS_TABLE_ID,
 } from "../../constants"
 import { importToRows } from "../../api/controllers/table/utils"
@@ -16,19 +14,23 @@ import { jobsImport } from "./jobsImport"
 import { expensesImport } from "./expensesImport"
 import { db as dbCore } from "@budibase/backend-core"
 import {
+  AutoFieldSubType,
+  Datasource,
   FieldType,
+  JsonFieldSubType,
   RelationshipType,
   Row,
+  SourceName,
   Table,
   TableSchema,
   TableSourceType,
 } from "@budibase/types"
 
-const defaultDatasource = {
+const defaultDatasource: Datasource = {
   _id: DEFAULT_BB_DATASOURCE_ID,
   type: dbCore.BUDIBASE_DATASOURCE_TYPE,
   name: "Sample Data",
-  source: "BUDIBASE",
+  source: SourceName.BUDIBASE,
   config: {},
 }
 
@@ -40,7 +42,7 @@ function syncLastIds(table: Table, rowCount: number) {
     if (
       entry.autocolumn &&
       entry.type === FieldType.NUMBER &&
-      entry.subtype == AutoFieldSubTypes.AUTO_ID
+      entry.subtype == AutoFieldSubType.AUTO_ID
     ) {
       entry.lastID = rowCount
     }
@@ -58,12 +60,12 @@ async function tableImport(table: Table, data: Row[]) {
 const AUTO_COLUMNS: TableSchema = {
   "Created At": {
     name: "Created At",
-    type: FieldTypes.DATETIME,
-    subtype: AutoFieldSubTypes.CREATED_AT,
+    type: FieldType.DATETIME,
+    subtype: AutoFieldSubType.CREATED_AT,
     icon: "ri-magic-line",
     autocolumn: true,
     constraints: {
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       length: {},
       presence: false,
       datetime: {
@@ -74,12 +76,12 @@ const AUTO_COLUMNS: TableSchema = {
   },
   "Updated At": {
     name: "Updated At",
-    type: FieldTypes.DATETIME,
-    subtype: AutoFieldSubTypes.UPDATED_AT,
+    type: FieldType.DATETIME,
+    subtype: AutoFieldSubType.UPDATED_AT,
     icon: "ri-magic-line",
     autocolumn: true,
     constraints: {
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       length: {},
       presence: false,
       datetime: {
@@ -101,12 +103,12 @@ export const DEFAULT_INVENTORY_TABLE_SCHEMA: Table = {
   schema: {
     "Item ID": {
       name: "Item ID",
-      type: FieldTypes.NUMBER,
-      subtype: AutoFieldSubTypes.AUTO_ID,
+      type: FieldType.NUMBER,
+      subtype: AutoFieldSubType.AUTO_ID,
       icon: "ri-magic-line",
       autocolumn: true,
       constraints: {
-        type: FieldTypes.NUMBER,
+        type: FieldType.NUMBER,
         presence: false,
         numericality: {
           greaterThanOrEqualTo: "",
@@ -115,9 +117,9 @@ export const DEFAULT_INVENTORY_TABLE_SCHEMA: Table = {
       },
     },
     "Item Name": {
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {
           maximum: null,
         },
@@ -128,9 +130,9 @@ export const DEFAULT_INVENTORY_TABLE_SCHEMA: Table = {
       name: "Item Name",
     },
     "Item Tags": {
-      type: FieldTypes.ARRAY,
+      type: FieldType.ARRAY,
       constraints: {
-        type: FieldTypes.ARRAY,
+        type: JsonFieldSubType.ARRAY,
         presence: {
           allowEmpty: false,
         },
@@ -140,9 +142,9 @@ export const DEFAULT_INVENTORY_TABLE_SCHEMA: Table = {
       sortable: false,
     },
     Notes: {
-      type: FieldTypes.LONGFORM,
+      type: FieldType.LONGFORM,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
@@ -150,9 +152,9 @@ export const DEFAULT_INVENTORY_TABLE_SCHEMA: Table = {
       useRichText: null,
     },
     Status: {
-      type: FieldTypes.ARRAY,
+      type: FieldType.ARRAY,
       constraints: {
-        type: FieldTypes.ARRAY,
+        type: JsonFieldSubType.ARRAY,
         presence: {
           allowEmpty: false,
         },
@@ -162,18 +164,18 @@ export const DEFAULT_INVENTORY_TABLE_SCHEMA: Table = {
       sortable: false,
     },
     SKU: {
-      type: FieldTypes.BARCODEQR,
+      type: FieldType.BARCODEQR,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
       name: "SKU",
     },
     "Purchase Date": {
-      type: FieldTypes.DATETIME,
+      type: FieldType.DATETIME,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
         datetime: {
@@ -185,9 +187,9 @@ export const DEFAULT_INVENTORY_TABLE_SCHEMA: Table = {
       ignoreTimezones: true,
     },
     "Purchase Price": {
-      type: FieldTypes.NUMBER,
+      type: FieldType.NUMBER,
       constraints: {
-        type: FieldTypes.NUMBER,
+        type: FieldType.NUMBER,
         presence: false,
         numericality: {
           greaterThanOrEqualTo: null,
@@ -211,75 +213,75 @@ export const DEFAULT_EMPLOYEE_TABLE_SCHEMA: Table = {
   schema: {
     "First Name": {
       name: "First Name",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
     },
     "Last Name": {
       name: "Last Name",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
     },
     Email: {
       name: "Email",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
     },
     Address: {
       name: "Address",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
     },
     City: {
       name: "City",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
     },
     Postcode: {
       name: "Postcode",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
     },
     Phone: {
       name: "Phone",
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
     },
     "EMPLOYEE ID": {
       name: "EMPLOYEE ID",
-      type: FieldTypes.NUMBER,
-      subtype: AutoFieldSubTypes.AUTO_ID,
+      type: FieldType.NUMBER,
+      subtype: AutoFieldSubType.AUTO_ID,
       icon: "ri-magic-line",
       autocolumn: true,
       constraints: {
-        type: FieldTypes.NUMBER,
+        type: FieldType.NUMBER,
         presence: false,
         numericality: {
           greaterThanOrEqualTo: "",
@@ -288,9 +290,9 @@ export const DEFAULT_EMPLOYEE_TABLE_SCHEMA: Table = {
       },
     },
     "Employee Level": {
-      type: FieldTypes.ARRAY,
+      type: FieldType.ARRAY,
       constraints: {
-        type: FieldTypes.ARRAY,
+        type: JsonFieldSubType.ARRAY,
         presence: false,
         inclusion: ["Manager", "Junior", "Senior", "Apprentice", "Contractor"],
       },
@@ -298,18 +300,18 @@ export const DEFAULT_EMPLOYEE_TABLE_SCHEMA: Table = {
       sortable: false,
     },
     "Badge Photo": {
-      type: FieldTypes.ATTACHMENT,
+      type: FieldType.ATTACHMENTS,
       constraints: {
-        type: FieldTypes.ARRAY,
+        type: FieldType.ARRAY,
         presence: false,
       },
       name: "Badge Photo",
       sortable: false,
     },
     Jobs: {
-      type: FieldTypes.LINK,
+      type: FieldType.LINK,
       constraints: {
-        type: FieldTypes.ARRAY,
+        type: FieldType.ARRAY,
         presence: false,
       },
       fieldName: "Assigned",
@@ -318,9 +320,9 @@ export const DEFAULT_EMPLOYEE_TABLE_SCHEMA: Table = {
       tableId: DEFAULT_JOBS_TABLE_ID,
     },
     "Start Date": {
-      type: FieldTypes.DATETIME,
+      type: FieldType.DATETIME,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
         datetime: {
@@ -332,9 +334,9 @@ export const DEFAULT_EMPLOYEE_TABLE_SCHEMA: Table = {
       ignoreTimezones: true,
     },
     "End Date": {
-      type: FieldTypes.DATETIME,
+      type: FieldType.DATETIME,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
         datetime: {
@@ -359,12 +361,12 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
   schema: {
     "Job ID": {
       name: "Job ID",
-      type: FieldTypes.NUMBER,
-      subtype: AutoFieldSubTypes.AUTO_ID,
+      type: FieldType.NUMBER,
+      subtype: AutoFieldSubType.AUTO_ID,
       icon: "ri-magic-line",
       autocolumn: true,
       constraints: {
-        type: FieldTypes.NUMBER,
+        type: FieldType.NUMBER,
         presence: false,
         numericality: {
           greaterThanOrEqualTo: "",
@@ -373,9 +375,9 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       },
     },
     "Quote Date": {
-      type: FieldTypes.DATETIME,
+      type: FieldType.DATETIME,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: {
           allowEmpty: false,
@@ -389,9 +391,9 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       ignoreTimezones: true,
     },
     "Quote Price": {
-      type: FieldTypes.NUMBER,
+      type: FieldType.NUMBER,
       constraints: {
-        type: FieldTypes.NUMBER,
+        type: FieldType.NUMBER,
         presence: {
           allowEmpty: false,
         },
@@ -403,9 +405,9 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       name: "Quote Price",
     },
     "Works Start": {
-      type: FieldTypes.DATETIME,
+      type: FieldType.DATETIME,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
         datetime: {
@@ -417,9 +419,9 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       ignoreTimezones: true,
     },
     Address: {
-      type: FieldTypes.LONGFORM,
+      type: FieldType.LONGFORM,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
@@ -427,9 +429,9 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       useRichText: null,
     },
     "Customer Name": {
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {
           maximum: null,
         },
@@ -438,9 +440,9 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       name: "Customer Name",
     },
     Notes: {
-      type: FieldTypes.LONGFORM,
+      type: FieldType.LONGFORM,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
@@ -448,9 +450,9 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       useRichText: null,
     },
     "Customer Phone": {
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {
           maximum: null,
         },
@@ -459,9 +461,9 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       name: "Customer Phone",
     },
     "Customer Email": {
-      type: FieldTypes.STRING,
+      type: FieldType.STRING,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {
           maximum: null,
         },
@@ -471,14 +473,14 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
     },
     Assigned: {
       name: "Assigned",
-      type: FieldTypes.LINK,
+      type: FieldType.LINK,
       tableId: DEFAULT_EMPLOYEE_TABLE_ID,
       fieldName: "Jobs",
       relationshipType: RelationshipType.MANY_TO_MANY,
       // sortable: true,
     },
     "Works End": {
-      type: FieldTypes.DATETIME,
+      type: FieldType.DATETIME,
       constraints: {
         type: "string",
         length: {},
@@ -492,7 +494,7 @@ export const DEFAULT_JOBS_TABLE_SCHEMA: Table = {
       ignoreTimezones: true,
     },
     "Updated Price": {
-      type: FieldTypes.NUMBER,
+      type: FieldType.NUMBER,
       constraints: {
         type: "number",
         presence: false,
@@ -518,12 +520,12 @@ export const DEFAULT_EXPENSES_TABLE_SCHEMA: Table = {
   schema: {
     "Expense ID": {
       name: "Expense ID",
-      type: FieldTypes.NUMBER,
-      subtype: AutoFieldSubTypes.AUTO_ID,
+      type: FieldType.NUMBER,
+      subtype: AutoFieldSubType.AUTO_ID,
       icon: "ri-magic-line",
       autocolumn: true,
       constraints: {
-        type: FieldTypes.NUMBER,
+        type: FieldType.NUMBER,
         presence: false,
         numericality: {
           greaterThanOrEqualTo: "",
@@ -532,9 +534,9 @@ export const DEFAULT_EXPENSES_TABLE_SCHEMA: Table = {
       },
     },
     "Expense Tags": {
-      type: FieldTypes.ARRAY,
+      type: FieldType.ARRAY,
       constraints: {
-        type: FieldTypes.ARRAY,
+        type: JsonFieldSubType.ARRAY,
         presence: {
           allowEmpty: false,
         },
@@ -554,9 +556,9 @@ export const DEFAULT_EXPENSES_TABLE_SCHEMA: Table = {
       sortable: false,
     },
     Cost: {
-      type: FieldTypes.NUMBER,
+      type: FieldType.NUMBER,
       constraints: {
-        type: FieldTypes.NUMBER,
+        type: FieldType.NUMBER,
         presence: {
           allowEmpty: false,
         },
@@ -568,9 +570,9 @@ export const DEFAULT_EXPENSES_TABLE_SCHEMA: Table = {
       name: "Cost",
     },
     Notes: {
-      type: FieldTypes.LONGFORM,
+      type: FieldType.LONGFORM,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
       },
@@ -578,9 +580,9 @@ export const DEFAULT_EXPENSES_TABLE_SCHEMA: Table = {
       useRichText: null,
     },
     "Payment Due": {
-      type: FieldTypes.DATETIME,
+      type: FieldType.DATETIME,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
         datetime: {
@@ -592,9 +594,9 @@ export const DEFAULT_EXPENSES_TABLE_SCHEMA: Table = {
       ignoreTimezones: true,
     },
     "Date Paid": {
-      type: FieldTypes.DATETIME,
+      type: FieldType.DATETIME,
       constraints: {
-        type: FieldTypes.STRING,
+        type: FieldType.STRING,
         length: {},
         presence: false,
         datetime: {
@@ -606,9 +608,9 @@ export const DEFAULT_EXPENSES_TABLE_SCHEMA: Table = {
       ignoreTimezones: true,
     },
     Attachment: {
-      type: FieldTypes.ATTACHMENT,
+      type: FieldType.ATTACHMENTS,
       constraints: {
-        type: FieldTypes.ARRAY,
+        type: FieldType.ARRAY,
         presence: false,
       },
       name: "Attachment",
@@ -617,6 +619,13 @@ export const DEFAULT_EXPENSES_TABLE_SCHEMA: Table = {
     ...AUTO_COLUMNS,
   },
 }
+
+export const DEFAULT_TABLES: Table[] = [
+  DEFAULT_INVENTORY_TABLE_SCHEMA,
+  DEFAULT_EMPLOYEE_TABLE_SCHEMA,
+  DEFAULT_JOBS_TABLE_SCHEMA,
+  DEFAULT_EXPENSES_TABLE_SCHEMA,
+]
 
 export async function buildDefaultDocs() {
   const inventoryData = await tableImport(
@@ -642,10 +651,10 @@ export async function buildDefaultDocs() {
       return new LinkDocument(
         employeeData.table._id!,
         "Jobs",
-        employeeData.rows[index]._id,
+        employeeData.rows[index]._id!,
         jobData.table._id!,
         "Assigned",
-        jobData.rows[index]._id
+        jobData.rows[index]._id!
       )
     }
   )

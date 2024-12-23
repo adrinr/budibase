@@ -2,6 +2,7 @@ export * as local from "./passport/local"
 export * as google from "./passport/sso/google"
 export * as oidc from "./passport/sso/oidc"
 import * as datasourceGoogle from "./passport/datasource/google"
+
 export const datasource = {
   google: datasourceGoogle,
 }
@@ -18,4 +19,6 @@ export { default as pino } from "../logging/pino/middleware"
 export { default as correlation } from "../logging/correlation/middleware"
 export { default as errorHandling } from "./errorHandling"
 export { default as querystringToBody } from "./querystringToBody"
+export { default as csp } from "./contentSecurityPolicy"
 export * as joiValidator from "./joi-validator"
+export { default as ip } from "./ip"

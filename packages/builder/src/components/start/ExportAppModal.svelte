@@ -8,16 +8,17 @@
     Input,
     notifications,
   } from "@budibase/bbui"
+  import { downloadFile } from "@budibase/frontend-core"
   import { createValidationStore } from "helpers/validation/yup"
 
   export let app
   export let published
   let includeInternalTablesRows = true
-  let encypt = true
+  let encrypt = true
 
   let password = null
   const validation = createValidationStore()
-  validation.addValidatorType("password", "password", true, { minLength: 8 })
+  validation.addValidatorType("password", "password", true, { minLength: 12 })
   $: validation.observe("password", password)
 
   const Step = { CONFIG: "config", SET_PASSWORD: "set_password" }
@@ -27,9 +28,9 @@
   $: stepConfig = {
     [Step.CONFIG]: {
       title: published ? "Export published app" : "Export latest app",
-      confirmText: encypt ? "Continue" : exportButtonText,
+      confirmText: encrypt ? "Continue" : exportButtonText,
       onConfirm: () => {
-        if (!encypt) {
+        if (!encrypt) {
           exportApp()
         } else {
           currentStep = Step.SET_PASSWORD
@@ -46,7 +47,7 @@
         if (!$validation.valid) {
           return keepOpen
         }
-        exportApp(password)
+        await exportApp(password)
       },
       isValid: $validation.valid,
     },
@@ -55,40 +56,13 @@
   const exportApp = async () => {
     const id = published ? app.prodId : app.devId
     const url = `/api/backups/export?appId=${id}`
-    await downloadFile(url, {
-      excludeRows: !includeInternalTablesRows,
-      encryptPassword: password,
-    })
-  }
 
-  async function downloadFile(url, body) {
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+      const downloaded = await downloadFile(url, {
+        excludeRows: !includeInternalTablesRows,
+        encryptPassword: password,
       })
-
-      if (response.ok) {
-        const contentDisposition = response.headers.get("Content-Disposition")
-
-        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(
-          contentDisposition
-        )
-
-        const filename = matches[1].replace(/['"]/g, "")
-
-        const url = URL.createObjectURL(await response.blob())
-
-        const link = document.createElement("a")
-        link.href = url
-        link.download = filename
-        link.click()
-
-        URL.revokeObjectURL(url)
-      } else {
+      if (!downloaded) {
         notifications.error("Error exporting the app.")
       }
     } catch (error) {
@@ -109,18 +83,19 @@
         text="Export rows from internal tables"
         bind:value={includeInternalTablesRows}
       />
-      <Toggle text="Encrypt my export" bind:value={encypt} />
+      <Toggle text="Encrypt my export" bind:value={encrypt} />
     </Body>
-    {#if !encypt}
-      <InlineAlert
-        header="Do not share your budibase application exports publicly as they may contain sensitive information such as database credentials or secret keys."
-      />
-    {/if}
+    <InlineAlert
+      header={encrypt
+        ? "Please note Budibase does not encrypt attachments during the export process to ensure efficient export of large attachments."
+        : "Do not share your Budibase application exports publicly as they may contain sensitive information such as database credentials or secret keys."}
+    />
   {/if}
   {#if currentStep === Step.SET_PASSWORD}
     <Input
       type="password"
       label="Password"
+      autocomplete="new-password"
       placeholder="Type here..."
       bind:value={password}
       error={$validation.errors.password}

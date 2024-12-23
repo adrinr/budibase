@@ -1,7 +1,14 @@
 <script>
   import { isActive, redirect, goto, url } from "@roxi/routify"
   import { Icon, notifications, Tabs, Tab } from "@budibase/bbui"
-  import { organisation, auth, menu, apps } from "stores/portal"
+  import {
+    organisation,
+    auth,
+    menu,
+    appsStore,
+    licensing,
+    admin,
+  } from "stores/portal"
   import { onMount } from "svelte"
   import UpgradeButton from "./_components/UpgradeButton.svelte"
   import MobileMenu from "./_components/MobileMenu.svelte"
@@ -10,13 +17,17 @@
   import HelpMenu from "components/common/HelpMenu.svelte"
   import VerificationPromptBanner from "components/common/VerificationPromptBanner.svelte"
   import { sdk } from "@budibase/shared-core"
+  import EnterpriseBasicTrialBanner from "components/portal/licensing/EnterpriseBasicTrialBanner.svelte"
+  import { Constants } from "@budibase/frontend-core"
 
   let loaded = false
   let mobileMenuVisible = false
   let activeTab = "Apps"
 
   $: $url(), updateActiveTab($menu)
-  $: isOnboarding = !$apps.length && sdk.users.isGlobalBuilder($auth.user)
+  $: isOnboarding =
+    !$appsStore.apps.length && sdk.users.hasBuilderPermissions($auth.user)
+  $: isOwner = $auth.accountPortalAccess && $admin.cloud
 
   const updateActiveTab = menu => {
     for (let entry of menu) {
@@ -32,6 +43,13 @@
   const showMobileMenu = () => (mobileMenuVisible = true)
   const hideMobileMenu = () => (mobileMenuVisible = false)
 
+  const showFreeTrialBanner = () => {
+    return (
+      $licensing.license?.plan?.type ===
+        Constants.PlanType.ENTERPRISE_BASIC_TRIAL && isOwner
+    )
+  }
+
   onMount(async () => {
     // Prevent non-builders from accessing the portal
     if ($auth.user) {
@@ -40,7 +58,7 @@
       } else {
         try {
           // We need to load apps to know if we need to show onboarding fullscreen
-          await Promise.all([apps.load(), organisation.init()])
+          await Promise.all([appsStore.load(), organisation.init()])
         } catch (error) {
           notifications.error("Error getting org config")
         }
@@ -57,6 +75,7 @@
     <HelpMenu />
     <div class="container">
       <VerificationPromptBanner />
+      <EnterpriseBasicTrialBanner show={showFreeTrialBanner()} />
       <div class="nav">
         <div class="branding">
           <Logo />

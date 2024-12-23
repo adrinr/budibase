@@ -1,8 +1,7 @@
 <script>
   import { get } from "svelte/store"
-  import { datasources, integrations } from "stores/backend"
-  import { notifications } from "@budibase/bbui"
-  import { Input, ModalContent, Modal } from "@budibase/bbui"
+  import { datasources, integrations } from "stores/builder"
+  import { notifications, Input, ModalContent, Modal } from "@budibase/bbui"
   import { integrationForDatasource } from "stores/selectors"
 
   let error = ""
@@ -34,7 +33,7 @@
       ...datasource,
       name,
     }
-    await datasources.update({
+    await datasources.save({
       datasource: updatedDatasource,
       integration: integrationForDatasource(get(integrations), datasource),
     })

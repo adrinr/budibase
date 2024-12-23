@@ -18,7 +18,7 @@ function generateResponse(to: string, from: string) {
   }
 }
 
-const setup = require("./utilities")
+import * as setup from "./utilities"
 
 describe("test the outgoing webhook action", () => {
   let inputs
@@ -33,7 +33,7 @@ describe("test the outgoing webhook action", () => {
     jest
       .spyOn(workerRequests, "sendSmtpEmail")
       .mockImplementationOnce(async () =>
-        generateResponse("user1@test.com", "admin@test.com")
+        generateResponse("user1@example.com", "admin@example.com")
       )
     const invite = {
       startTime: new Date(),
@@ -43,17 +43,22 @@ describe("test the outgoing webhook action", () => {
       url: "url",
     }
     inputs = {
-      to: "user1@test.com",
-      from: "admin@test.com",
+      to: "user1@example.com",
+      from: "admin@example.com",
       subject: "hello",
       contents: "testing",
       cc: "cc",
       bcc: "bcc",
       addInvite: true,
+      attachments: [
+        { url: "attachment1", filename: "attachment1.txt" },
+        { url: "attachment2", filename: "attachment2.txt" },
+      ],
       ...invite,
     }
     let resp = generateResponse(inputs.to, inputs.from)
     const res = await setup.runStep(
+      config,
       setup.actions.SEND_EMAIL_SMTP.stepId,
       inputs
     )
@@ -61,14 +66,18 @@ describe("test the outgoing webhook action", () => {
     expect(res.success).toEqual(true)
     expect(workerRequests.sendSmtpEmail).toHaveBeenCalledTimes(1)
     expect(workerRequests.sendSmtpEmail).toHaveBeenCalledWith({
-      to: "user1@test.com",
-      from: "admin@test.com",
+      to: "user1@example.com",
+      from: "admin@example.com",
       subject: "hello",
       contents: "testing",
       cc: "cc",
       bcc: "bcc",
       invite,
       automation: true,
+      attachments: [
+        { url: "attachment1", filename: "attachment1.txt" },
+        { url: "attachment2", filename: "attachment2.txt" },
+      ],
     })
   })
 })

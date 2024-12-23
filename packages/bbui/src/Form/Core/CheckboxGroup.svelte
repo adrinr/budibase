@@ -6,7 +6,6 @@
   export let direction = "vertical"
   export let value = []
   export let options = []
-  export let error = null
   export let disabled = false
   export let readonly = false
   export let getOptionLabel = option => option
@@ -14,9 +13,8 @@
 
   const dispatch = createEventDispatcher()
 
-  const onChange = e => {
-    const optionValue = e.target.value
-    if (e.target.checked && !value.includes(optionValue)) {
+  const onChange = optionValue => {
+    if (!value.includes(optionValue)) {
       dispatch("change", [...value, optionValue])
     } else {
       dispatch(
@@ -34,17 +32,15 @@
       <div
         title={getOptionLabel(option)}
         class="spectrum-Checkbox spectrum-FieldGroup-item"
-        class:is-invalid={!!error}
         class:readonly
       >
         <label
           class="spectrum-Checkbox spectrum-Checkbox--sizeM spectrum-FieldGroup-item"
         >
           <input
-            on:change={onChange}
+            on:change={() => onChange(optionValue)}
             type="checkbox"
             class="spectrum-Checkbox-input"
-            value={optionValue}
             checked={value.includes(optionValue)}
             {disabled}
           />

@@ -1,26 +1,23 @@
 <script>
   import { Select } from "@budibase/bbui"
-  import {
-    getDatasourceForProvider,
-    getSchemaForDatasource,
-  } from "builderStore/dataBinding"
-  import { currentAsset } from "builderStore"
+  import { getDatasourceForProvider, getSchemaForDatasource } from "dataBinding"
+  import { selectedScreen } from "stores/builder"
   import { createEventDispatcher } from "svelte"
-  import { canBeSortColumn } from "@budibase/shared-core"
+  import { canBeSortColumn } from "@budibase/frontend-core"
 
   export let componentInstance = {}
   export let value = ""
   export let placeholder
 
   const dispatch = createEventDispatcher()
-  $: datasource = getDatasourceForProvider($currentAsset, componentInstance)
-  $: schema = getSchemaForDatasource($currentAsset, datasource).schema
+  $: datasource = getDatasourceForProvider($selectedScreen, componentInstance)
+  $: schema = getSchemaForDatasource($selectedScreen, datasource).schema
   $: options = getSortableFields(schema)
   $: boundValue = getValidValue(value, options)
 
   const getSortableFields = schema => {
     return Object.entries(schema || {})
-      .filter(entry => canBeSortColumn(entry[1].type))
+      .filter(entry => canBeSortColumn(entry[1]))
       .map(entry => entry[0])
   }
 

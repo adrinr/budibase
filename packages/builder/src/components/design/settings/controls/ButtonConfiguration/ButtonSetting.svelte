@@ -1,7 +1,7 @@
 <script>
   import EditComponentPopover from "../EditComponentPopover.svelte"
   import { Icon } from "@budibase/bbui"
-  import { runtimeToReadableBinding } from "builderStore/dataBinding"
+  import { runtimeToReadableBinding } from "dataBinding"
   import { isJSBinding } from "@budibase/string-templates"
 
   export let item
@@ -55,7 +55,10 @@
       size="S"
       name="Close"
       hoverable
-      on:click={() => removeButton(item._id)}
+      on:click={e => {
+        e.stopPropagation()
+        removeButton(item._id)
+      }}
     />
   </div>
 </div>

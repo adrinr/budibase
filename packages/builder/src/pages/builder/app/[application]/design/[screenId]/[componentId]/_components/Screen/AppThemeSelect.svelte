@@ -1,29 +1,28 @@
 <script>
   import { notifications } from "@budibase/bbui"
-  import { store } from "builderStore"
-  import { Constants } from "@budibase/frontend-core"
+  import { themeStore, appStore } from "stores/builder"
+  import { ThemeOptions, getThemeClassNames } from "@budibase/shared-core"
 
   const onChangeTheme = async theme => {
     try {
-      await store.actions.theme.save(`spectrum--${theme}`)
+      await themeStore.save(theme, $appStore.appId)
     } catch (error) {
       notifications.error("Error updating theme")
     }
   }
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <div class="container">
-  {#each Constants.Themes as theme}
+  {#each ThemeOptions as themeMeta}
     <div
       class="theme"
-      class:selected={`spectrum--${theme.class}` === $store.theme}
-      on:click={() => onChangeTheme(theme.class)}
+      class:selected={themeMeta.id === $themeStore.theme}
+      on:click={() => onChangeTheme(themeMeta.id)}
     >
-      <div
-        style="background: {theme.preview}"
-        class="color spectrum--{theme.class}"
-      />
-      {theme.name}
+      <div class="color {getThemeClassNames(themeMeta.id)}" />
+      {themeMeta.name}
     </div>
   {/each}
 </div>

@@ -1,19 +1,10 @@
-import { AutomationResults, AutomationStep } from "@budibase/types"
-
-export enum LoopStepType {
-  ARRAY = "Array",
-  STRING = "String",
-}
-
-export interface LoopStep extends AutomationStep {
-  inputs: {
-    option: LoopStepType
-    [key: string]: any
-  }
-}
+import { AutomationResults, LoopStepType, UserBindings } from "@budibase/types"
 
 export interface LoopInput {
-  binding: string[] | string
+  option: LoopStepType
+  binding?: string[] | string | number[]
+  iterations?: string
+  failure?: any
 }
 
 export interface TriggerOutput {
@@ -24,6 +15,17 @@ export interface TriggerOutput {
 
 export interface AutomationContext extends AutomationResults {
   steps: any[]
+  stepsById: Record<string, any>
+  stepsByName: Record<string, any>
   env?: Record<string, string>
+  user?: UserBindings
   trigger: any
+  settings?: {
+    url?: string
+    logo?: string
+    company?: string
+  }
 }
+
+export interface AutomationResponse
+  extends Omit<AutomationContext, "stepsByName" | "stepsById"> {}

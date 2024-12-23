@@ -29,6 +29,8 @@ export enum Databases {
   WRITE_THROUGH = "writeThrough",
   LOCKS = "locks",
   SOCKET_IO = "socket_io",
+  BPM_EVENTS = "bpmEvents",
+  DOC_WRITE_THROUGH = "docWriteThrough",
 }
 
 /**
@@ -75,10 +77,12 @@ export function getRedisConnectionDetails() {
   }
   const [host, port] = url.split(":")
 
+  const portNumber = parseInt(port)
   return {
     host,
     password,
-    port: parseInt(port),
+    // assume default port for redis if invalid found
+    port: isNaN(portNumber) ? 6379 : portNumber,
   }
 }
 

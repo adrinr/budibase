@@ -10,7 +10,11 @@ export const ActionTypes = {
   ClearForm: "ClearForm",
   ChangeFormStep: "ChangeFormStep",
   ScrollTo: "ScrollTo",
+  ClearRowSelection: "ClearRowSelection",
 }
 
 export const DNDPlaceholderID = "dnd-placeholder"
 export const ScreenslotType = "screenslot"
+export const GridRowHeight = 24
+export const GridColumns = 12
+export const GridSpacing = 4

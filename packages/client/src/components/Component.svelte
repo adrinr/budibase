@@ -9,7 +9,7 @@
 </script>
 
 <script>
-  import { getContext, setContext, onMount, onDestroy } from "svelte"
+  import { getContext, setContext, onMount } from "svelte"
   import { writable, get } from "svelte/store"
   import {
     enrichProps,
@@ -30,8 +30,19 @@
   import ScreenPlaceholder from "components/app/ScreenPlaceholder.svelte"
   import ComponentErrorState from "components/error-states/ComponentErrorState.svelte"
   import { BudibasePrefix } from "../stores/components.js"
+  import {
+    decodeJSBinding,
+    findHBSBlocks,
+    isJSBinding,
+  } from "@budibase/string-templates"
+  import {
+    getActionContextKey,
+    getActionDependentContextKeys,
+  } from "../utils/buttonActions.js"
+  import { gridLayout } from "utils/grid.js"
 
   export let instance = {}
+  export let parent = null
   export let isLayout = false
   export let isRoot = false
   export let isBlock = false
@@ -81,7 +92,6 @@
 
   // Keep track of stringified representations of context and instance
   // to avoid enriching bindings as much as possible
-  let lastContextKey
   let lastInstanceKey
 
   // Visibility flag used by conditional UI
@@ -94,9 +104,19 @@
   let settingsDefinitionMap
   let missingRequiredSettings = false
 
-  // Temporary styles which can be added in the app preview for things like DND.
-  // We clear these whenever a new instance is received.
+  // Temporary styles which can be added in the app preview for things like
+  // DND. We clear these whenever a new instance is received.
   let ephemeralStyles
+
+  // Single string of all HBS blocks, used to check if we use a certain binding
+  // or not
+  let bindingString = ""
+
+  // List of context keys which we use inside bindings
+  let knownContextKeyMap = {}
+
+  // Cleanup function to stop observing context changes when unmounting
+  let unobserve
 
   // Set up initial state for each new component instance
   $: initialise(instance)
@@ -133,7 +153,7 @@
   $: builderInteractive =
     $builderStore.inBuilder && insideScreenslot && !isBlock && !instance.static
   $: devToolsInteractive = $devToolsStore.allowSelection && !isBlock
-  $: interactive = !isRoot && (builderInteractive || devToolsInteractive)
+  $: interactive = builderInteractive || devToolsInteractive
   $: editing = editable && selected && $builderStore.editMode
   $: draggable =
     !inDragPath &&
@@ -155,9 +175,6 @@
       hasMissingRequiredSettings)
   $: emptyState = empty && showEmptyState
 
-  // Enrich component settings
-  $: enrichComponentSettings($context, settingsDefinitionMap)
-
   // Evaluate conditional UI settings and store any component setting changes
   // which need to be made
   $: evaluateConditions(conditions)
@@ -172,10 +189,36 @@
   // Scroll the selected element into view
   $: selected && scrollIntoView()
 
+  // Themes
+  $: currentTheme = $context?.device?.theme
+  $: darkMode = !currentTheme?.includes("light")
+
+  // Apply ephemeral styles (such as when resizing grid components)
+  $: normalStyles = {
+    ...instance._styles?.normal,
+    ...ephemeralStyles,
+  }
+
+  // Metadata to pass into grid action to apply CSS
+  const checkGrid = x =>
+    x?._component?.endsWith("/container") && x?.layout === "grid"
+  $: insideGrid = checkGrid(parent)
+  $: isGrid = checkGrid(instance)
+  $: gridMetadata = {
+    insideGrid,
+    ignoresLayout: definition?.ignoresLayout === true,
+    id,
+    interactive,
+    styles: normalStyles,
+    draggable,
+    definition,
+    errored: errorState,
+  }
+
   // When dragging and dropping, pad components to allow dropping between
   // nested layers. Only reset this when dragging stops.
   let pad = false
-  $: pad = pad || (interactive && hasChildren && inDndPath)
+  $: pad = pad || (!isGrid && interactive && hasChildren && inDndPath)
   $: $dndIsDragging, (pad = false)
 
   // Update component context
@@ -184,21 +227,20 @@
     children: children.length,
     styles: {
       ...instance._styles,
-      normal: {
-        ...instance._styles?.normal,
-        ...ephemeralStyles,
-      },
+      normal: normalStyles,
       custom: customCSS,
       id,
       empty: emptyState,
       selected,
       interactive,
+      isRoot,
       draggable,
       editable,
       isBlock,
     },
     empty: emptyState,
     selected,
+    isRoot,
     inSelectedPath,
     name,
     editing,
@@ -206,6 +248,8 @@
     errorState,
     parent: id,
     ancestors: [...($component?.ancestors ?? []), instance._component],
+    path: [...($component?.path ?? []), id],
+    darkMode,
   })
 
   const initialise = (instance, force = false) => {
@@ -214,12 +258,16 @@
     }
 
     // Ensure we're processing a new instance
-    const instanceKey = Helpers.hashString(JSON.stringify(instance))
+    const stringifiedInstance = JSON.stringify(instance)
+    const instanceKey = Helpers.hashString(stringifiedInstance)
     if (instanceKey === lastInstanceKey && !force) {
       return
     } else {
       lastInstanceKey = instanceKey
     }
+
+    // Reset ephemeral state
+    ephemeralStyles = null
 
     // Pull definition and constructor
     const component = instance._component
@@ -229,15 +277,18 @@
       return
     }
 
+    const cacheId = `${definition.name}${
+      definition?.deprecated === true ? "_deprecated" : ""
+    }`
     // Get the settings definition for this component, and cache it
-    if (SettingsDefinitionCache[definition.name]) {
-      settingsDefinition = SettingsDefinitionCache[definition.name]
-      settingsDefinitionMap = SettingsDefinitionMapCache[definition.name]
+    if (SettingsDefinitionCache[cacheId]) {
+      settingsDefinition = SettingsDefinitionCache[cacheId]
+      settingsDefinitionMap = SettingsDefinitionMapCache[cacheId]
     } else {
       settingsDefinition = getSettingsDefinition(definition)
       settingsDefinitionMap = getSettingsDefinitionMap(settingsDefinition)
-      SettingsDefinitionCache[definition.name] = settingsDefinition
-      SettingsDefinitionMapCache[definition.name] = settingsDefinitionMap
+      SettingsDefinitionCache[cacheId] = settingsDefinition
+      SettingsDefinitionMapCache[cacheId] = settingsDefinitionMap
     }
 
     // Parse the instance settings, and cache them
@@ -263,10 +314,23 @@
         const dependsOnKey = setting.dependsOn.setting || setting.dependsOn
         const dependsOnValue = setting.dependsOn.value
         const realDependentValue = instance[dependsOnKey]
+
+        const sectionDependsOnKey =
+          setting.sectionDependsOn?.setting || setting.sectionDependsOn
+        const sectionDependsOnValue = setting.sectionDependsOn?.value
+        const sectionRealDependentValue = instance[sectionDependsOnKey]
+
         if (dependsOnValue == null && realDependentValue == null) {
           return false
         }
-        if (dependsOnValue !== realDependentValue) {
+        if (dependsOnValue != null && dependsOnValue !== realDependentValue) {
+          return false
+        }
+
+        if (
+          sectionDependsOnValue != null &&
+          sectionDependsOnValue !== sectionRealDependentValue
+        ) {
           return false
         }
       }
@@ -274,13 +338,59 @@
       return missing
     })
 
+    // When considering bindings we can ignore children, so we remove that
+    // before storing the reference stringified version
+    const noChildren = JSON.stringify({ ...instance, _children: null })
+    const bindings = findHBSBlocks(noChildren).map(binding => {
+      let sanitizedBinding = binding.replace(/\\"/g, '"')
+      if (isJSBinding(sanitizedBinding)) {
+        return decodeJSBinding(sanitizedBinding)
+      } else {
+        return sanitizedBinding
+      }
+    })
+
+    // The known context key map is built up at runtime, as changes to keys are
+    // encountered. We manually seed this to the required action keys as these
+    // are not encountered at runtime and so need computed in advance.
+    knownContextKeyMap = generateActionKeyMap(instance, settingsDefinition)
+    bindingString = bindings.join(" ")
+
     // Run any migrations
     runMigrations(instance, settingsDefinition)
 
     // Force an initial enrichment of the new settings
-    enrichComponentSettings(get(context), settingsDefinitionMap, {
-      force: true,
+    enrichComponentSettings(get(context), settingsDefinitionMap)
+
+    // Start observing changes in context now that we are initialised
+    if (!unobserve) {
+      unobserve = context.actions.observeChanges(handleContextChange)
+    }
+  }
+
+  // Extracts a map of all context keys which are required by action settings
+  // to provide the functions to evaluate at runtime. This needs done manually
+  // as the action definitions themselves do not specify bindings for action
+  // keys, meaning we cannot do this while doing the other normal bindings.
+  const generateActionKeyMap = (instance, settingsDefinition) => {
+    let map = {}
+    settingsDefinition.forEach(setting => {
+      if (setting.type === "event") {
+        instance[setting.key]?.forEach(action => {
+          // We depend on the actual action key
+          const actionKey = getActionContextKey(action)
+          if (actionKey) {
+            map[actionKey] = true
+          }
+
+          // We also depend on any manually declared context keys
+          getActionDependentContextKeys(action)?.forEach(key => {
+            map[key] = true
+          })
+        })
+      }
     })
+    return map
   }
 
   const runMigrations = (instance, settingsDefinition) => {
@@ -381,17 +491,7 @@
   }
 
   // Enriches any string component props using handlebars
-  const enrichComponentSettings = (
-    context,
-    settingsDefinitionMap,
-    options = { force: false }
-  ) => {
-    const contextChanged = context.key !== lastContextKey
-    if (!contextChanged && !options?.force) {
-      return
-    }
-    lastContextKey = context.key
-
+  const enrichComponentSettings = (context, settingsDefinitionMap) => {
     // Record the timestamp so we can reference it after enrichment
     latestUpdateTime = Date.now()
     const enrichmentTime = latestUpdateTime
@@ -454,7 +554,12 @@
       cachedSettings = { ...allSettings }
       initialSettings = cachedSettings
     } else {
-      Object.keys(allSettings).forEach(key => {
+      // We need to compare all keys from both the current and previous settings, as
+      // keys may have disappeared in the current set which would otherwise be ignored
+      // if we only checked the current set keys
+      const keys = new Set(Object.keys(allSettings))
+      Object.keys(cachedSettings).forEach(key => keys.add(key))
+      keys.forEach(key => {
         const same = propsAreSame(allSettings[key], cachedSettings[key])
         if (!same) {
           // Updated cachedSettings (which is assigned by reference to
@@ -488,47 +593,76 @@
     }
   }
 
-  const scrollIntoView = () => {
-    // Don't scroll into view if we selected this component because we were
-    // starting dragging on it
-    if (get(dndIsDragging)) {
-      return
-    }
-    const node = document.getElementsByClassName(id)?.[0]?.children[0]
+  const scrollIntoView = async () => {
+    const className = insideGrid ? id : `${id}-dom`
+    const node = document.getElementsByClassName(className)[0]
     if (!node) {
       return
     }
-    node.style.scrollMargin = "100px"
+    // Don't scroll into view if we selected this component because we were
+    // starting dragging on it
+    if (
+      get(dndIsDragging) ||
+      (insideGrid && node.classList.contains("dragging"))
+    ) {
+      return
+    }
     node.scrollIntoView({
-      behavior: "smooth",
+      behavior: "instant",
       block: "nearest",
       inline: "start",
     })
   }
 
-  onMount(() => {
-    if (
-      $appStore.isDevApp &&
-      !componentStore.actions.isComponentRegistered(id)
-    ) {
-      componentStore.actions.registerInstance(id, {
-        component: instance._component,
-        getSettings: () => cachedSettings,
-        getRawSettings: () => ({ ...staticSettings, ...dynamicSettings }),
-        getDataContext: () => get(context),
-        reload: () => initialise(instance, true),
-        setEphemeralStyles: styles => (ephemeralStyles = styles),
-        state: store,
-      })
-    }
-  })
+  const handleContextChange = key => {
+    // Check if we already know if this key is used
+    let used = knownContextKeyMap[key]
 
-  onDestroy(() => {
-    if (
-      $appStore.isDevApp &&
-      componentStore.actions.isComponentRegistered(id)
-    ) {
-      componentStore.actions.unregisterInstance(id)
+    // If we don't know, check and cache
+    if (used == null) {
+      const searchString = key === "snippets" ? key : `[${key}]`
+      used = bindingString.indexOf(searchString) !== -1
+      knownContextKeyMap[key] = used
+    }
+
+    // Enrich settings if we use this key
+    if (used) {
+      enrichComponentSettings($context, settingsDefinitionMap)
+    }
+  }
+
+  const getDataContext = () => {
+    const normalContext = get(context)
+    const additionalContext = ref?.getAdditionalDataContext?.()
+    return {
+      ...normalContext,
+      ...additionalContext,
+    }
+  }
+
+  onMount(() => {
+    // Register this component instance for external access
+    if ($appStore.isDevApp) {
+      if (!componentStore.actions.isComponentRegistered(id)) {
+        componentStore.actions.registerInstance(id, {
+          component: instance._component,
+          getSettings: () => cachedSettings,
+          getRawSettings: () => ({ ...staticSettings, ...dynamicSettings }),
+          getDataContext,
+          reload: () => initialise(instance, true),
+          setEphemeralStyles: styles => (ephemeralStyles = styles),
+          state: store,
+        })
+      }
+    }
+    return () => {
+      // Unregister component
+      if (componentStore.actions.isComponentRegistered(id)) {
+        componentStore.actions.unregisterInstance(id)
+      }
+
+      // Stop observing context changes
+      unobserve?.()
     }
   })
 </script>
@@ -547,10 +681,12 @@
     class:parent={hasChildren}
     class:block={isBlock}
     class:error={errorState}
+    class:root={isRoot}
     data-id={id}
     data-name={name}
     data-icon={icon}
     data-parent={$component.id}
+    use:gridLayout={gridMetadata}
   >
     {#if errorState}
       <ComponentErrorState
@@ -561,7 +697,7 @@
       <svelte:component this={constructor} bind:this={ref} {...initialSettings}>
         {#if children.length}
           {#each children as child (child._id)}
-            <svelte:self instance={child} />
+            <svelte:self instance={child} parent={instance} />
           {/each}
         {:else if emptyState}
           {#if isRoot}
@@ -588,7 +724,7 @@
     border-radius: 4px !important;
     transition: padding 260ms ease-out, border 260ms ease-out;
   }
-  .interactive :global(*) {
-    cursor: default;
+  .interactive {
+    cursor: default !important;
   }
 </style>

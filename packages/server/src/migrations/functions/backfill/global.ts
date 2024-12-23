@@ -8,12 +8,13 @@ import {
   accounts,
   db as dbUtils,
 } from "@budibase/backend-core"
-import { QuotaUsage } from "@budibase/types"
 import {
-  CloudAccount,
   App,
-  TenantBackfillSucceededEvent,
+  CloudAccount,
   Event,
+  Hosting,
+  QuotaUsage,
+  TenantBackfillSucceededEvent,
   User,
 } from "@budibase/types"
 import env from "../../../environment"
@@ -125,7 +126,7 @@ export const run = async (db: any) => {
     try {
       await events.identification.identifyTenantGroup(
         tenantId,
-        account,
+        env.SELF_HOSTED ? Hosting.SELF : Hosting.CLOUD,
         timestamp
       )
     } catch (e) {

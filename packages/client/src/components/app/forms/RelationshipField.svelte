@@ -1,9 +1,9 @@
 <script>
   import { CoreSelect, CoreMultiselect } from "@budibase/bbui"
-  import { fetchData } from "@budibase/frontend-core"
+  import { FieldType } from "@budibase/types"
+  import { fetchData, Utils } from "@budibase/frontend-core"
   import { getContext } from "svelte"
   import Field from "./Field.svelte"
-  import { FieldTypes } from "../../../constants"
 
   const { API } = getContext("sdk")
 
@@ -20,6 +20,8 @@
   export let datasourceType = "table"
   export let primaryDisplay
   export let span
+  export let helpText = null
+  export let type = FieldType.LINK
 
   let fieldState
   let fieldApi
@@ -28,10 +30,9 @@
   let searchTerm
   let open
 
-  $: type =
-    datasourceType === "table" ? FieldTypes.LINK : FieldTypes.BB_REFERENCE
-
-  $: multiselect = fieldSchema?.relationshipType !== "one-to-many"
+  $: multiselect =
+    [FieldType.LINK, FieldType.BB_REFERENCE].includes(type) &&
+    fieldSchema?.relationshipType !== "one-to-many"
   $: linkedTableId = fieldSchema?.tableId
   $: fetch = fetchData({
     API,
@@ -50,18 +51,19 @@
     ? flatten(fieldState?.value) ?? []
     : flatten(fieldState?.value)?.[0]
   $: component = multiselect ? CoreMultiselect : CoreSelect
-  $: expandedDefaultValue = expand(defaultValue)
   $: primaryDisplay = primaryDisplay || tableDefinition?.primaryDisplay
 
-  let optionsObj = {}
-  let initialValuesProcessed
+  let optionsObj
 
   $: {
-    if (!initialValuesProcessed && primaryDisplay) {
+    if (primaryDisplay && fieldState && !optionsObj) {
       // Persist the initial values as options, allowing them to be present in the dropdown,
       // even if they are not in the inital fetch results
-      initialValuesProcessed = true
-      optionsObj = (fieldState?.value || []).reduce((accumulator, value) => {
+      let valueAsSafeArray = fieldState.value || []
+      if (!Array.isArray(valueAsSafeArray)) {
+        valueAsSafeArray = [fieldState.value]
+      }
+      optionsObj = valueAsSafeArray.reduce((accumulator, value) => {
         // fieldState has to be an array of strings to be valid for an update
         // therefore we cannot guarantee value will be an object
         // https://linear.app/budibase/issue/BUDI-7577/refactor-the-relationshipfield-component-to-have-better-support-for
@@ -73,7 +75,7 @@
           [primaryDisplay]: value.primaryDisplay,
         }
         return accumulator
-      }, optionsObj)
+      }, {})
     }
   }
 
@@ -84,7 +86,7 @@
         accumulator[row._id] = row
       }
       return accumulator
-    }, optionsObj)
+    }, optionsObj || {})
 
     return Object.values(result)
   }
@@ -107,8 +109,16 @@
     }
   }
 
-  $: fetchRows(searchTerm, primaryDisplay, defaultValue)
+  $: forceFetchRows(filter)
+  $: debouncedFetchRows(searchTerm, primaryDisplay, defaultValue)
 
+  const forceFetchRows = async () => {
+    // if the filter has changed, then we need to reset the options, clear the selection, and re-fetch
+    optionsObj = {}
+    fieldApi?.setValue([])
+    selectedValue = []
+    debouncedFetchRows(searchTerm, primaryDisplay, defaultValue)
+  }
   const fetchRows = async (searchTerm, primaryDisplay, defaultVal) => {
     const allRowsFetched =
       $fetch.loaded &&
@@ -118,30 +128,43 @@
     if (allRowsFetched || !primaryDisplay) {
       return
     }
-    if (defaultVal && !optionsObj[defaultVal]) {
+    // must be an array
+    if (defaultVal && !Array.isArray(defaultVal)) {
+      defaultVal = defaultVal.split(",")
+    }
+    if (defaultVal && optionsObj && defaultVal.some(val => !optionsObj[val])) {
       await fetch.update({
-        query: { equal: { _id: defaultVal } },
+        query: { oneOf: { _id: defaultVal } },
       })
     }
+
+    // Ensure we match all filters, rather than any
+    const baseFilter = (filter || []).filter(x => x.operator !== "allOr")
     await fetch.update({
-      query: { string: { [primaryDisplay]: searchTerm } },
+      filter: [
+        ...baseFilter,
+        {
+          // Use a big numeric prefix to avoid clashing with an existing filter
+          field: `999:${primaryDisplay}`,
+          operator: "string",
+          value: searchTerm,
+        },
+      ],
     })
   }
+  const debouncedFetchRows = Utils.debounce(fetchRows, 250)
 
   const flatten = values => {
     if (!values) {
       return []
     }
+
     if (!Array.isArray(values)) {
       values = [values]
     }
     values = values.map(value =>
       typeof value === "object" ? value._id : value
     )
-    // Make sure field state is valid
-    if (values?.length > 0) {
-      fieldApi.setValue(values)
-    }
     return values
   }
 
@@ -149,25 +172,20 @@
     return row?.[primaryDisplay] || "-"
   }
 
-  const singleHandler = e => {
-    handleChange(e.detail == null ? [] : [e.detail])
-  }
-
-  const multiHandler = e => {
-    handleChange(e.detail)
-  }
-
-  const expand = values => {
-    if (!values) {
-      return []
+  const handleChange = e => {
+    let value = e.detail
+    if (!multiselect) {
+      value = value == null ? [] : [value]
     }
-    if (Array.isArray(values)) {
-      return values
-    }
-    return values.split(",").map(value => value.trim())
-  }
 
-  const handleChange = value => {
+    if (
+      type === FieldType.BB_REFERENCE_SINGLE &&
+      value &&
+      Array.isArray(value)
+    ) {
+      value = value[0] || null
+    }
+
     const changed = fieldApi.setValue(value)
     if (onChange && changed) {
       onChange({
@@ -189,9 +207,10 @@
   {disabled}
   {readonly}
   {validation}
-  defaultValue={expandedDefaultValue}
+  {defaultValue}
   {type}
   {span}
+  {helpText}
   bind:fieldState
   bind:fieldApi
   bind:fieldSchema
@@ -202,7 +221,7 @@
       options={enrichedOptions}
       {autocomplete}
       value={selectedValue}
-      on:change={multiselect ? multiHandler : singleHandler}
+      on:change={handleChange}
       on:loadMore={loadMore}
       id={fieldState.fieldId}
       disabled={fieldState.disabled}
@@ -214,7 +233,6 @@
       bind:searchTerm
       loading={$fetch.loading}
       bind:open
-      customPopoverMaxHeight={400}
     />
   {/if}
 </Field>

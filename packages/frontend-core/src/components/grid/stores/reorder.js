@@ -1,12 +1,13 @@
 import { get, writable, derived } from "svelte/store"
+import { parseEventLocation } from "../lib/utils"
 
 const reorderInitialState = {
   sourceColumn: null,
   targetColumn: null,
+  insertAfter: false,
   breakpoints: [],
   gridLeft: 0,
   width: 0,
-  latestX: 0,
   increment: 0,
 }
 
@@ -27,33 +28,41 @@ export const createActions = context => {
   const {
     reorder,
     columns,
-    visibleColumns,
+    columnLookupMap,
+    scrollableColumns,
     scroll,
     bounds,
-    stickyColumn,
-    ui,
+    visibleColumns,
+    datasource,
+    stickyWidth,
+    width,
+    scrollLeft,
     maxScrollLeft,
   } = context
-
+  let latestX = 0
   let autoScrollInterval
   let isAutoScrolling
 
   // Callback when dragging on a colum header and starting reordering
   const startReordering = (column, e) => {
-    const $visibleColumns = get(visibleColumns)
+    const $scrollableColumns = get(scrollableColumns)
     const $bounds = get(bounds)
-    const $stickyColumn = get(stickyColumn)
-    ui.actions.blur()
+    const $stickyWidth = get(stickyWidth)
 
     // Generate new breakpoints for the current columns
-    let breakpoints = $visibleColumns.map(col => ({
-      x: col.left + col.width,
+    const breakpoints = $scrollableColumns.map(col => ({
+      x: col.__left - $stickyWidth,
       column: col.name,
+      insertAfter: false,
     }))
-    if ($stickyColumn) {
-      breakpoints.unshift({
-        x: 0,
-        column: $stickyColumn.name,
+
+    // Add a very left breakpoint as well
+    const lastCol = $scrollableColumns[$scrollableColumns.length - 1]
+    if (lastCol) {
+      breakpoints.push({
+        x: lastCol.__left + lastCol.width - $stickyWidth,
+        column: lastCol.name,
+        insertAfter: true,
       })
     }
 
@@ -69,6 +78,9 @@ export const createActions = context => {
     // Add listeners to handle mouse movement
     document.addEventListener("mousemove", onReorderMouseMove)
     document.addEventListener("mouseup", stopReordering)
+    document.addEventListener("touchmove", onReorderMouseMove)
+    document.addEventListener("touchend", stopReordering)
+    document.addEventListener("touchcancel", stopReordering)
 
     // Trigger a move event immediately so ensure a candidate column is chosen
     onReorderMouseMove(e)
@@ -77,25 +89,24 @@ export const createActions = context => {
   // Callback when moving the mouse when reordering columns
   const onReorderMouseMove = e => {
     // Immediately handle the current position
-    const x = e.clientX
-    reorder.update(state => ({
-      ...state,
-      latestX: x,
-    }))
+    const { x } = parseEventLocation(e)
+    latestX = x
     considerReorderPosition()
 
     // Check if we need to start auto-scrolling
+    const $scrollLeft = get(scrollLeft)
+    const $maxScrollLeft = get(maxScrollLeft)
     const $reorder = get(reorder)
-    const proximityCutoff = 140
-    const speedFactor = 8
+    const proximityCutoff = Math.min(140, get(width) / 6)
+    const speedFactor = 16
     const rightProximity = Math.max(0, $reorder.gridLeft + $reorder.width - x)
     const leftProximity = Math.max(0, x - $reorder.gridLeft)
-    if (rightProximity < proximityCutoff) {
+    if (rightProximity < proximityCutoff && $scrollLeft < $maxScrollLeft) {
       const weight = proximityCutoff - rightProximity
       const increment = (weight / proximityCutoff) * speedFactor
       reorder.update(state => ({ ...state, increment }))
       startAutoScroll()
-    } else if (leftProximity < proximityCutoff) {
+    } else if (leftProximity < proximityCutoff && $scrollLeft > 0) {
       const weight = -1 * (proximityCutoff - leftProximity)
       const increment = (weight / proximityCutoff) * speedFactor
       reorder.update(state => ({ ...state, increment }))
@@ -108,23 +119,28 @@ export const createActions = context => {
   // Actual logic to consider the current position and determine the new order
   const considerReorderPosition = () => {
     const $reorder = get(reorder)
-    const $scroll = get(scroll)
+    const $scrollLeft = get(scrollLeft)
 
     // Compute the closest breakpoint to the current position
-    let targetColumn
+    let breakpoint
     let minDistance = Number.MAX_SAFE_INTEGER
-    const mouseX = $reorder.latestX - $reorder.gridLeft + $scroll.left
+    const mouseX = latestX - $reorder.gridLeft + $scrollLeft
     $reorder.breakpoints.forEach(point => {
       const distance = Math.abs(point.x - mouseX)
       if (distance < minDistance) {
         minDistance = distance
-        targetColumn = point.column
+        breakpoint = point
       }
     })
-    if (targetColumn !== $reorder.targetColumn) {
+    if (
+      breakpoint &&
+      (breakpoint.column !== $reorder.targetColumn ||
+        breakpoint.insertAfter !== $reorder.insertAfter)
+    ) {
       reorder.update(state => ({
         ...state,
-        targetColumn,
+        targetColumn: breakpoint.column,
+        insertAfter: breakpoint.insertAfter,
       }))
     }
   }
@@ -158,55 +174,87 @@ export const createActions = context => {
     // Ensure auto-scrolling is stopped
     stopAutoScroll()
 
-    // Swap position of columns
-    let { sourceColumn, targetColumn } = get(reorder)
-    moveColumn(sourceColumn, targetColumn)
-
-    // Reset state
-    reorder.set(reorderInitialState)
-
     // Remove event handlers
     document.removeEventListener("mousemove", onReorderMouseMove)
     document.removeEventListener("mouseup", stopReordering)
+    document.removeEventListener("touchmove", onReorderMouseMove)
+    document.removeEventListener("touchend", stopReordering)
+    document.removeEventListener("touchcancel", stopReordering)
 
-    // Save column changes
-    await columns.actions.saveChanges()
+    // Ensure there's actually a change before saving
+    const { sourceColumn, targetColumn, insertAfter } = get(reorder)
+    reorder.set(reorderInitialState)
+    if (sourceColumn !== targetColumn) {
+      await moveColumn({ sourceColumn, targetColumn, insertAfter })
+    }
   }
 
   // Moves a column after another columns.
   // An undefined target column will move the source to index 0.
-  const moveColumn = (sourceColumn, targetColumn) => {
-    let $columns = get(columns)
-    let sourceIdx = $columns.findIndex(x => x.name === sourceColumn)
-    let targetIdx = $columns.findIndex(x => x.name === targetColumn)
-    targetIdx++
+  const moveColumn = async ({
+    sourceColumn,
+    targetColumn,
+    insertAfter = false,
+  }) => {
+    // Find the indices in the overall columns array
+    const $columns = get(columns)
+    let sourceIdx = $columns.findIndex(col => col.name === sourceColumn)
+    let targetIdx = $columns.findIndex(col => col.name === targetColumn)
+    if (insertAfter) {
+      targetIdx++
+    }
+
+    // Reorder columns
     columns.update(state => {
       const removed = state.splice(sourceIdx, 1)
       if (--targetIdx < sourceIdx) {
         targetIdx++
       }
-      state.splice(targetIdx, 0, removed[0])
-      return state.slice()
+      return state.toSpliced(targetIdx, 0, removed[0])
     })
+
+    // Extract new orders as schema mutations
+    get(columns).forEach((column, idx) => {
+      const { related } = column
+      const mutation = { order: idx }
+      if (!related) {
+        datasource.actions.addSchemaMutation(column.name, mutation)
+      } else {
+        datasource.actions.addSubSchemaMutation(
+          related.subField,
+          related.field,
+          mutation
+        )
+      }
+    })
+
+    await datasource.actions.saveSchemaMutations()
   }
 
   // Moves a column one place left (as appears visually)
   const moveColumnLeft = async column => {
     const $visibleColumns = get(visibleColumns)
-    const sourceIdx = $visibleColumns.findIndex(x => x.name === column)
-    moveColumn(column, $visibleColumns[sourceIdx - 2]?.name)
-    await columns.actions.saveChanges()
+    const $columnLookupMap = get(columnLookupMap)
+    const sourceIdx = $columnLookupMap[column].__idx
+    await moveColumn({
+      sourceColumn: column,
+      targetColumn: $visibleColumns[sourceIdx - 1]?.name,
+    })
   }
 
   // Moves a column one place right (as appears visually)
   const moveColumnRight = async column => {
     const $visibleColumns = get(visibleColumns)
-    const sourceIdx = $visibleColumns.findIndex(x => x.name === column)
+    const $columnLookupMap = get(columnLookupMap)
+    const sourceIdx = $columnLookupMap[column].__idx
     if (sourceIdx === $visibleColumns.length - 1) {
       return
     }
-    moveColumn(column, $visibleColumns[sourceIdx + 1]?.name)
-    await columns.actions.saveChanges()
+    await moveColumn({
+      sourceColumn: column,
+      targetColumn: $visibleColumns[sourceIdx + 1]?.name,
+      insertAfter: true,
+    })
   }
 
   return {

@@ -7,17 +7,24 @@
   export let app
   export let color
   export let autoSave = false
+  export let disabled = false
 
   let modal
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="editable-icon">
-  <div class="hover" on:click={modal.show}>
-    <Icon name="Edit" {size} color="var(--spectrum-global-color-gray-600)" />
-  </div>
-  <div class="normal">
+  {#if !disabled}
+    <div class="hover" on:click={modal.show}>
+      <Icon name="Edit" {size} color="var(--spectrum-global-color-gray-600)" />
+    </div>
+    <div class="normal">
+      <Icon name={name || "Apps"} {size} {color} />
+    </div>
+  {:else}
     <Icon {name} {size} {color} />
-  </div>
+  {/if}
 </div>
 
 <Modal bind:this={modal}>

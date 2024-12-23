@@ -1,19 +1,21 @@
 <script>
   import { Body } from "@budibase/bbui"
   import CreationPage from "components/common/CreationPage.svelte"
-  import blankImage from "./blank.png"
-  import tableImage from "./table.png"
-  import gridImage from "./grid.png"
+  import blank from "./images/blank.svg"
+  import table from "./images/tableInline.svg"
+  import form from "./images/formUpdate.svg"
   import CreateScreenModal from "./CreateScreenModal.svelte"
-  import { store } from "builderStore"
+  import { screenStore } from "stores/builder"
 
   export let onClose = null
 
   let createScreenModal
 
-  $: hasScreens = $store.screens?.length
+  $: hasScreens = $screenStore.screens?.length
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <div class="page">
   <CreationPage
     showClose={!!onClose}
@@ -27,31 +29,31 @@
     <div class="cards">
       <div class="card" on:click={() => createScreenModal.show("blank")}>
         <div class="image">
-          <img alt="" src={blankImage} />
+          <img alt="A blank screen" src={blank} />
         </div>
         <div class="text">
-          <Body size="S">Blank screen</Body>
+          <Body size="S">Blank</Body>
           <Body size="XS">Add an empty blank screen</Body>
         </div>
       </div>
 
       <div class="card" on:click={() => createScreenModal.show("table")}>
         <div class="image">
-          <img alt="" src={tableImage} />
+          <img alt="A table of data" src={table} />
         </div>
         <div class="text">
           <Body size="S">Table</Body>
-          <Body size="XS">View, edit and delete rows on a table</Body>
+          <Body size="XS">List rows in a table</Body>
         </div>
       </div>
 
-      <div class="card" on:click={() => createScreenModal.show("grid")}>
+      <div class="card" on:click={() => createScreenModal.show("form")}>
         <div class="image">
-          <img alt="" src={gridImage} />
+          <img alt="A form containing data" src={form} />
         </div>
         <div class="text">
-          <Body size="S">Grid</Body>
-          <Body size="XS">View and manipulate rows on a grid</Body>
+          <Body size="S">Form</Body>
+          <Body size="XS">Capture data from your users</Body>
         </div>
       </div>
     </div>
@@ -98,6 +100,12 @@
 
   .image img {
     width: 100%;
+  }
+
+  .card .image {
+    min-width: 235px;
+    height: 127px;
+    background-color: var(--grey-2);
   }
 
   .text {

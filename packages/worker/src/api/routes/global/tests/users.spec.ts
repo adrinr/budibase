@@ -39,7 +39,7 @@ describe("/api/global/users", () => {
 
       expect(sendMailMock).toHaveBeenCalled()
       expect(code).toBeDefined()
-      expect(events.user.invited).toBeCalledTimes(1)
+      expect(events.user.invited).toHaveBeenCalledTimes(1)
     })
 
     it("should not be able to generate an invitation for existing user", async () => {
@@ -52,7 +52,7 @@ describe("/api/global/users", () => {
       expect(res.body.message).toBe(`Unavailable`)
       expect(sendMailMock).toHaveBeenCalledTimes(0)
       expect(code).toBeUndefined()
-      expect(events.user.invited).toBeCalledTimes(0)
+      expect(events.user.invited).toHaveBeenCalledTimes(0)
     })
 
     it("should not invite the same user twice", async () => {
@@ -70,7 +70,7 @@ describe("/api/global/users", () => {
       expect(res.body.message).toBe(`Unavailable`)
       expect(sendMailMock).toHaveBeenCalledTimes(0)
       expect(code).toBeUndefined()
-      expect(events.user.invited).toBeCalledTimes(0)
+      expect(events.user.invited).toHaveBeenCalledTimes(0)
     })
 
     it("should be able to create new user from invite", async () => {
@@ -86,8 +86,8 @@ describe("/api/global/users", () => {
       const user = await config.getUser(email)
       expect(user).toBeDefined()
       expect(user!._id).toEqual(res.body._id)
-      expect(events.user.inviteAccepted).toBeCalledTimes(1)
-      expect(events.user.inviteAccepted).toBeCalledWith(user)
+      expect(events.user.inviteAccepted).toHaveBeenCalledTimes(1)
+      expect(events.user.inviteAccepted).toHaveBeenCalledWith(user)
     })
   })
 
@@ -105,7 +105,7 @@ describe("/api/global/users", () => {
       expect(body.successful.length).toBe(2)
       expect(body.unsuccessful.length).toBe(0)
       expect(sendMailMock).toHaveBeenCalledTimes(2)
-      expect(events.user.invited).toBeCalledTimes(2)
+      expect(events.user.invited).toHaveBeenCalledTimes(2)
     })
 
     it("should not be able to generate an invitation for existing user", async () => {
@@ -118,7 +118,7 @@ describe("/api/global/users", () => {
       expect(body.unsuccessful.length).toBe(1)
       expect(body.unsuccessful[0].reason).toBe("Unavailable")
       expect(sendMailMock).toHaveBeenCalledTimes(0)
-      expect(events.user.invited).toBeCalledTimes(0)
+      expect(events.user.invited).toHaveBeenCalledTimes(0)
     })
 
     it("should not be able to generate an invitation for user that has already been invited", async () => {
@@ -135,7 +135,7 @@ describe("/api/global/users", () => {
       expect(body.unsuccessful.length).toBe(1)
       expect(body.unsuccessful[0].reason).toBe("Unavailable")
       expect(sendMailMock).toHaveBeenCalledTimes(0)
-      expect(events.user.invited).toBeCalledTimes(0)
+      expect(events.user.invited).toHaveBeenCalledTimes(0)
     })
   })
 
@@ -149,7 +149,7 @@ describe("/api/global/users", () => {
       expect(response.created?.successful.length).toBe(0)
       expect(response.created?.unsuccessful.length).toBe(1)
       expect(response.created?.unsuccessful[0].email).toBe(user.email)
-      expect(events.user.created).toBeCalledTimes(0)
+      expect(events.user.created).toHaveBeenCalledTimes(0)
     })
 
     it("should ignore users existing in other tenants", async () => {
@@ -162,7 +162,7 @@ describe("/api/global/users", () => {
         expect(response.created?.successful.length).toBe(0)
         expect(response.created?.unsuccessful.length).toBe(1)
         expect(response.created?.unsuccessful[0].email).toBe(user.email)
-        expect(events.user.created).toBeCalledTimes(0)
+        expect(events.user.created).toHaveBeenCalledTimes(0)
       })
     })
 
@@ -177,7 +177,7 @@ describe("/api/global/users", () => {
       expect(response.created?.successful.length).toBe(0)
       expect(response.created?.unsuccessful.length).toBe(1)
       expect(response.created?.unsuccessful[0].email).toBe(user.email)
-      expect(events.user.created).toBeCalledTimes(0)
+      expect(events.user.created).toHaveBeenCalledTimes(0)
     })
 
     it("should be able to bulk create users", async () => {
@@ -196,9 +196,9 @@ describe("/api/global/users", () => {
       expect(response.created?.successful[1].email).toBe(admin.email)
       expect(response.created?.successful[2].email).toBe(user.email)
       expect(response.created?.unsuccessful.length).toBe(0)
-      expect(events.user.created).toBeCalledTimes(3)
-      expect(events.user.permissionAdminAssigned).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderAssigned).toBeCalledTimes(2)
+      expect(events.user.created).toHaveBeenCalledTimes(3)
+      expect(events.user.permissionAdminAssigned).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderAssigned).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -208,10 +208,10 @@ describe("/api/global/users", () => {
 
       await config.api.users.saveUser(user)
 
-      expect(events.user.created).toBeCalledTimes(1)
-      expect(events.user.updated).not.toBeCalled()
-      expect(events.user.permissionBuilderAssigned).not.toBeCalled()
-      expect(events.user.permissionAdminAssigned).not.toBeCalled()
+      expect(events.user.created).toHaveBeenCalledTimes(1)
+      expect(events.user.updated).not.toHaveBeenCalled()
+      expect(events.user.permissionBuilderAssigned).not.toHaveBeenCalled()
+      expect(events.user.permissionAdminAssigned).not.toHaveBeenCalled()
     })
 
     it("should be able to create an admin user", async () => {
@@ -219,10 +219,10 @@ describe("/api/global/users", () => {
 
       await config.api.users.saveUser(user)
 
-      expect(events.user.created).toBeCalledTimes(1)
-      expect(events.user.updated).not.toBeCalled()
-      expect(events.user.permissionBuilderAssigned).toBeCalledTimes(1)
-      expect(events.user.permissionAdminAssigned).toBeCalledTimes(1)
+      expect(events.user.created).toHaveBeenCalledTimes(1)
+      expect(events.user.updated).not.toHaveBeenCalled()
+      expect(events.user.permissionBuilderAssigned).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionAdminAssigned).toHaveBeenCalledTimes(1)
     })
 
     it("should be able to create a builder user", async () => {
@@ -230,10 +230,10 @@ describe("/api/global/users", () => {
 
       await config.api.users.saveUser(user)
 
-      expect(events.user.created).toBeCalledTimes(1)
-      expect(events.user.updated).not.toBeCalled()
-      expect(events.user.permissionBuilderAssigned).toBeCalledTimes(1)
-      expect(events.user.permissionAdminAssigned).not.toBeCalled()
+      expect(events.user.created).toHaveBeenCalledTimes(1)
+      expect(events.user.updated).not.toHaveBeenCalled()
+      expect(events.user.permissionBuilderAssigned).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionAdminAssigned).not.toHaveBeenCalled()
     })
 
     it("should be able to assign app roles", async () => {
@@ -246,11 +246,11 @@ describe("/api/global/users", () => {
       await config.api.users.saveUser(user)
 
       const savedUser = await config.getUser(user.email)
-      expect(events.user.created).toBeCalledTimes(1)
-      expect(events.user.updated).not.toBeCalled()
-      expect(events.role.assigned).toBeCalledTimes(2)
-      expect(events.role.assigned).toBeCalledWith(savedUser, "role1")
-      expect(events.role.assigned).toBeCalledWith(savedUser, "role2")
+      expect(events.user.created).toHaveBeenCalledTimes(1)
+      expect(events.user.updated).not.toHaveBeenCalled()
+      expect(events.role.assigned).toHaveBeenCalledTimes(2)
+      expect(events.role.assigned).toHaveBeenCalledWith(savedUser, "role1")
+      expect(events.role.assigned).toHaveBeenCalledWith(savedUser, "role2")
     })
 
     it("should not be able to create user that exists in same tenant", async () => {
@@ -264,7 +264,7 @@ describe("/api/global/users", () => {
       expect(response.body.message).toBe(
         `Email already in use: '${user.email}'`
       )
-      expect(events.user.created).toBeCalledTimes(0)
+      expect(events.user.created).toHaveBeenCalledTimes(0)
     })
 
     it("should not be able to create user that exists in other tenant", async () => {
@@ -278,7 +278,7 @@ describe("/api/global/users", () => {
         expect(response.body.message).toBe(
           `Email already in use: '${user.email}'`
         )
-        expect(events.user.created).toBeCalledTimes(0)
+        expect(events.user.created).toHaveBeenCalledTimes(0)
       })
     })
 
@@ -292,7 +292,7 @@ describe("/api/global/users", () => {
       expect(response.body.message).toBe(
         `Email already in use: '${user.email}'`
       )
-      expect(events.user.created).toBeCalledTimes(0)
+      expect(events.user.created).toHaveBeenCalledTimes(0)
     })
 
     it("should not be able to create a user with the same email and different casing", async () => {
@@ -302,7 +302,7 @@ describe("/api/global/users", () => {
       user.email = user.email.toUpperCase()
       await config.api.users.saveUser(user, 400)
 
-      expect(events.user.created).toBeCalledTimes(1)
+      expect(events.user.created).toHaveBeenCalledTimes(1)
     })
 
     it("should not be able to bulk create a user with the same email and different casing", async () => {
@@ -312,7 +312,7 @@ describe("/api/global/users", () => {
       user.email = user.email.toUpperCase()
       await config.api.users.bulkCreateUsers([user])
 
-      expect(events.user.created).toBeCalledTimes(1)
+      expect(events.user.created).toHaveBeenCalledTimes(1)
     })
 
     it("should not allow a non-admin user to create a new user", async () => {
@@ -335,15 +335,15 @@ describe("/api/global/users", () => {
 
       await config.api.users.saveUser(user)
 
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderAssigned).not.toBeCalled()
-      expect(events.user.permissionAdminAssigned).not.toBeCalled()
-      expect(events.user.passwordForceReset).not.toBeCalled()
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderAssigned).not.toHaveBeenCalled()
+      expect(events.user.permissionAdminAssigned).not.toHaveBeenCalled()
+      expect(events.user.passwordForceReset).not.toHaveBeenCalled()
     })
 
     it("should not allow a user to update their own admin/builder status", async () => {
-      const user = (await config.api.users.getUser(config.user?._id!))
+      const user = (await config.api.users.getUser(config.user!._id!))
         .body as User
       await config.api.users.saveUser({
         ...user,
@@ -367,11 +367,11 @@ describe("/api/global/users", () => {
       user.password = "tempPassword"
       await config.api.users.saveUser(user)
 
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderAssigned).not.toBeCalled()
-      expect(events.user.permissionAdminAssigned).not.toBeCalled()
-      expect(events.user.passwordForceReset).toBeCalledTimes(1)
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderAssigned).not.toHaveBeenCalled()
+      expect(events.user.permissionAdminAssigned).not.toHaveBeenCalled()
+      expect(events.user.passwordForceReset).toHaveBeenCalledTimes(1)
     })
 
     it("should be able to update a basic user to an admin user", async () => {
@@ -380,10 +380,10 @@ describe("/api/global/users", () => {
 
       await config.api.users.saveUser(structures.users.adminUser(user))
 
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderAssigned).toBeCalledTimes(1)
-      expect(events.user.permissionAdminAssigned).toBeCalledTimes(1)
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderAssigned).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionAdminAssigned).toHaveBeenCalledTimes(1)
     })
 
     it("should be able to update a basic user to a builder user", async () => {
@@ -392,10 +392,10 @@ describe("/api/global/users", () => {
 
       await config.api.users.saveUser(structures.users.builderUser(user))
 
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderAssigned).toBeCalledTimes(1)
-      expect(events.user.permissionAdminAssigned).not.toBeCalled()
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderAssigned).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionAdminAssigned).not.toHaveBeenCalled()
     })
 
     it("should be able to update an admin user to a basic user", async () => {
@@ -406,10 +406,10 @@ describe("/api/global/users", () => {
 
       await config.api.users.saveUser(user)
 
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.user.permissionAdminRemoved).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderRemoved).toBeCalledTimes(1)
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionAdminRemoved).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderRemoved).toHaveBeenCalledTimes(1)
     })
 
     it("should be able to update an builder user to a basic user", async () => {
@@ -419,10 +419,10 @@ describe("/api/global/users", () => {
 
       await config.api.users.saveUser(user)
 
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderRemoved).toBeCalledTimes(1)
-      expect(events.user.permissionAdminRemoved).not.toBeCalled()
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderRemoved).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionAdminRemoved).not.toHaveBeenCalled()
     })
 
     it("should be able to assign app roles", async () => {
@@ -436,11 +436,11 @@ describe("/api/global/users", () => {
       await config.api.users.saveUser(user)
 
       const savedUser = await config.getUser(user.email)
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.role.assigned).toBeCalledTimes(2)
-      expect(events.role.assigned).toBeCalledWith(savedUser, "role1")
-      expect(events.role.assigned).toBeCalledWith(savedUser, "role2")
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.role.assigned).toHaveBeenCalledTimes(2)
+      expect(events.role.assigned).toHaveBeenCalledWith(savedUser, "role1")
+      expect(events.role.assigned).toHaveBeenCalledWith(savedUser, "role2")
     })
 
     it("should be able to unassign app roles", async () => {
@@ -456,11 +456,11 @@ describe("/api/global/users", () => {
       await config.api.users.saveUser(user)
 
       const savedUser = await config.getUser(user.email)
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.role.unassigned).toBeCalledTimes(2)
-      expect(events.role.unassigned).toBeCalledWith(savedUser, "role1")
-      expect(events.role.unassigned).toBeCalledWith(savedUser, "role2")
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.role.unassigned).toHaveBeenCalledTimes(2)
+      expect(events.role.unassigned).toHaveBeenCalledWith(savedUser, "role1")
+      expect(events.role.unassigned).toHaveBeenCalledWith(savedUser, "role2")
     })
 
     it("should be able to update existing app roles", async () => {
@@ -479,18 +479,18 @@ describe("/api/global/users", () => {
       await config.api.users.saveUser(user)
 
       const savedUser = await config.getUser(user.email)
-      expect(events.user.created).not.toBeCalled()
-      expect(events.user.updated).toBeCalledTimes(1)
-      expect(events.role.unassigned).toBeCalledTimes(1)
-      expect(events.role.unassigned).toBeCalledWith(savedUser, "role2")
-      expect(events.role.assigned).toBeCalledTimes(1)
-      expect(events.role.assigned).toBeCalledWith(savedUser, "role2-edit")
+      expect(events.user.created).not.toHaveBeenCalled()
+      expect(events.user.updated).toHaveBeenCalledTimes(1)
+      expect(events.role.unassigned).toHaveBeenCalledTimes(1)
+      expect(events.role.unassigned).toHaveBeenCalledWith(savedUser, "role2")
+      expect(events.role.assigned).toHaveBeenCalledTimes(1)
+      expect(events.role.assigned).toHaveBeenCalledWith(savedUser, "role2-edit")
     })
 
     it("should not be able to update email address", async () => {
       const email = structures.email()
       const user = await config.createUser(structures.users.user({ email }))
-      user.email = "new@test.com"
+      user.email = "new@example.com"
 
       const response = await config.api.users.saveUser(user, 400)
 
@@ -520,63 +520,70 @@ describe("/api/global/users", () => {
         })
       }
 
+      function createPasswordUser() {
+        return config.doInTenant(() => {
+          const user = structures.users.user()
+          return userSdk.db.save(user)
+        })
+      }
+
       it("should be able to update an sso user that has no password", async () => {
         const user = await createSSOUser()
         await config.api.users.saveUser(user)
+      })
+
+      it("sso support couldn't be used by admin. It is cloud restricted and needs internal key", async () => {
+        const user = await config.createUser()
+        const ssoId = "fake-ssoId"
+        await config.api.users
+          .addSsoSupportDefaultAuth(ssoId, user.email)
+          .expect("Content-Type", /json/)
+          .expect(403)
+      })
+
+      it("if user email doesn't exist, SSO support couldn't be added. Not found error returned", async () => {
+        const ssoId = "fake-ssoId"
+        const email = "fake-email@budibase.com"
+        await config.api.users
+          .addSsoSupportInternalAPIAuth(ssoId, email)
+          .expect("Content-Type", /json/)
+          .expect(404)
+      })
+
+      it("if user email exist, SSO support is added", async () => {
+        const user = await createPasswordUser()
+        const ssoId = "fakessoId"
+        await config.api.users
+          .addSsoSupportInternalAPIAuth(ssoId, user.email)
+          .expect(200)
+      })
+
+      it("if user ssoId is already assigned, no change will be applied", async () => {
+        const user = await createSSOUser()
+        user.ssoId = "testssoId"
+        await config.api.users
+          .addSsoSupportInternalAPIAuth(user.ssoId, user.email)
+          .expect(200)
       })
     })
   })
 
   describe("POST /api/global/users/bulk (delete)", () => {
     it("should not be able to bulk delete current user", async () => {
-      const user = await config.user!
+      const user = config.user!
 
-      const response = await config.api.users.bulkDeleteUsers([user._id!], 400)
+      const response = await config.api.users.bulkDeleteUsers(
+        [
+          {
+            userId: user._id!,
+            email: "test@example.com",
+          },
+        ],
+        400
+      )
 
       expect(response.message).toBe("Unable to delete self.")
-      expect(events.user.deleted).not.toBeCalled()
-    })
-
-    it("should not be able to bulk delete account owner", async () => {
-      const user = await config.createUser()
-      const account = structures.accounts.cloudAccount()
-      account.budibaseUserId = user._id!
-      accounts.getAccountByTenantId.mockReturnValue(Promise.resolve(account))
-
-      const response = await config.api.users.bulkDeleteUsers([user._id!])
-
-      expect(response.deleted?.successful.length).toBe(0)
-      expect(response.deleted?.unsuccessful.length).toBe(1)
-      expect(response.deleted?.unsuccessful[0].reason).toBe(
-        "Account holder cannot be deleted"
-      )
-      expect(response.deleted?.unsuccessful[0]._id).toBe(user._id)
-      expect(events.user.deleted).not.toBeCalled()
-    })
-
-    it("should be able to bulk delete users", async () => {
-      const account = structures.accounts.cloudAccount()
-      accounts.getAccountByTenantId.mockReturnValue(Promise.resolve(account))
-
-      const builder = structures.users.builderUser()
-      const admin = structures.users.adminUser()
-      const user = structures.users.user()
-      const createdUsers = await config.api.users.bulkCreateUsers([
-        builder,
-        admin,
-        user,
-      ])
-
-      const toDelete = createdUsers.created?.successful.map(
-        u => u._id!
-      ) as string[]
-      const response = await config.api.users.bulkDeleteUsers(toDelete)
-
-      expect(response.deleted?.successful.length).toBe(3)
-      expect(response.deleted?.unsuccessful.length).toBe(0)
-      expect(events.user.deleted).toBeCalledTimes(3)
-      expect(events.user.permissionAdminRemoved).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderRemoved).toBeCalledTimes(2)
+      expect(events.user.deleted).not.toHaveBeenCalled()
     })
   })
 
@@ -585,6 +592,15 @@ describe("/api/global/users", () => {
       const user = await config.createUser()
       const response = await config.api.users.searchUsers({
         query: { string: { email: user.email } },
+      })
+      expect(response.body.data.length).toBe(1)
+      expect(response.body.data[0].email).toBe(user.email)
+    })
+
+    it("should be able to search by email with numeric prefixing", async () => {
+      const user = await config.createUser()
+      const response = await config.api.users.searchUsers({
+        query: { string: { ["999:email"]: user.email } },
       })
       expect(response.body.data.length).toBe(1)
       expect(response.body.data[0].email).toBe(user.email)
@@ -599,18 +615,94 @@ describe("/api/global/users", () => {
       expect(response.body.data[0]._id).toBe(user._id)
     })
 
+    it("should be able to search by oneOf _id", async () => {
+      const [user, user2, user3] = await Promise.all([
+        config.createUser(),
+        config.createUser(),
+        config.createUser(),
+      ])
+      const response = await config.api.users.searchUsers({
+        query: { oneOf: { _id: [user._id, user2._id] } },
+      })
+      expect(response.body.data.length).toBe(2)
+      const foundUserIds = response.body.data.map((user: User) => user._id)
+      expect(foundUserIds).toContain(user._id)
+      expect(foundUserIds).toContain(user2._id)
+      expect(
+        response.body.data.find((user: User) => user._id === user3._id)
+      ).toBeUndefined()
+    })
+
+    it("should be able to search by _id with numeric prefixing", async () => {
+      const user = await config.createUser()
+      const response = await config.api.users.searchUsers({
+        query: { equal: { ["1:_id"]: user._id } },
+      })
+      expect(response.body.data.length).toBe(1)
+      expect(response.body.data[0]._id).toBe(user._id)
+    })
+
+    it("should throw an error when using multiple filters on the same field", async () => {
+      const user = await config.createUser()
+      await config.api.users.searchUsers(
+        {
+          query: {
+            string: {
+              ["1:email"]: user.email,
+              ["2:email"]: "something else",
+            },
+          },
+        },
+        { status: 400 }
+      )
+    })
+
+    it("should throw an error when using multiple filters on the same field without prefixes", async () => {
+      const user = await config.createUser()
+      await config.api.users.searchUsers(
+        {
+          query: {
+            string: {
+              ["_id"]: user.email,
+              ["999:_id"]: "something else",
+            },
+          },
+        },
+        { status: 400 }
+      )
+    })
+
     it("should throw an error when unimplemented options used", async () => {
       const user = await config.createUser()
       await config.api.users.searchUsers(
         {
           query: { equal: { firstName: user.firstName } },
         },
-        { status: 501 }
+        { status: 400 }
       )
     })
 
     it("should throw an error if public query performed", async () => {
       await config.api.users.searchUsers({}, { status: 403, noHeaders: true })
+    })
+
+    it("should be able to search using logical conditions", async () => {
+      const user = await config.createUser()
+      const response = await config.api.users.searchUsers({
+        query: {
+          $and: {
+            conditions: [
+              {
+                $and: {
+                  conditions: [{ string: { email: user.email } }],
+                },
+              },
+            ],
+          },
+        },
+      })
+      expect(response.body.data.length).toBe(1)
+      expect(response.body.data[0].email).toBe(user.email)
     })
   })
 
@@ -621,9 +713,9 @@ describe("/api/global/users", () => {
 
       await config.api.users.deleteUser(user._id!)
 
-      expect(events.user.deleted).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderRemoved).not.toBeCalled()
-      expect(events.user.permissionAdminRemoved).not.toBeCalled()
+      expect(events.user.deleted).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderRemoved).not.toHaveBeenCalled()
+      expect(events.user.permissionAdminRemoved).not.toHaveBeenCalled()
     })
 
     it("should be able to destroy an admin user", async () => {
@@ -632,9 +724,9 @@ describe("/api/global/users", () => {
 
       await config.api.users.deleteUser(user._id!)
 
-      expect(events.user.deleted).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderRemoved).toBeCalledTimes(1)
-      expect(events.user.permissionAdminRemoved).toBeCalledTimes(1)
+      expect(events.user.deleted).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderRemoved).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionAdminRemoved).toHaveBeenCalledTimes(1)
     })
 
     it("should be able to destroy a builder user", async () => {
@@ -643,9 +735,9 @@ describe("/api/global/users", () => {
 
       await config.api.users.deleteUser(user._id!)
 
-      expect(events.user.deleted).toBeCalledTimes(1)
-      expect(events.user.permissionBuilderRemoved).toBeCalledTimes(1)
-      expect(events.user.permissionAdminRemoved).not.toBeCalled()
+      expect(events.user.deleted).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionBuilderRemoved).toHaveBeenCalledTimes(1)
+      expect(events.user.permissionAdminRemoved).not.toHaveBeenCalled()
     })
 
     it("should not be able to destroy account owner", async () => {

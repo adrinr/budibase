@@ -1,4 +1,10 @@
 <script>
   import { redirect } from "@roxi/routify"
-  $redirect("./auth")
+  import { featureFlags } from "stores/portal"
+
+  if ($featureFlags.AI_CUSTOM_CONFIGS) {
+    $redirect("./ai")
+  } else {
+    $redirect("./auth")
+  }
 </script>

@@ -2,10 +2,7 @@ import Router from "@koa/router"
 import * as datasourceController from "../controllers/datasource"
 import authorized from "../../middleware/authorized"
 import { permissions } from "@budibase/backend-core"
-import {
-  datasourceValidator,
-  datasourceQueryValidator,
-} from "./utils/validators"
+import { datasourceValidator } from "./utils/validators"
 
 const router: Router = new Router()
 
@@ -42,18 +39,9 @@ router
     datasourceController.update
   )
   .post(
-    "/api/datasources/query",
-    authorized(
-      permissions.PermissionType.TABLE,
-      permissions.PermissionLevel.READ
-    ),
-    datasourceQueryValidator(),
-    datasourceController.query
-  )
-  .post(
     "/api/datasources/:datasourceId/schema",
     authorized(permissions.BUILDER),
-    datasourceController.buildSchemaFromDb
+    datasourceController.buildSchemaFromSource
   )
   .post(
     "/api/datasources",

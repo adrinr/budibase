@@ -1,7 +1,8 @@
 <script>
-  import { automationStore } from "builderStore"
-  import { notifications } from "@budibase/bbui"
+  import { goto } from "@roxi/routify"
+  import { automationStore } from "stores/builder"
   import {
+    notifications,
     Input,
     InlineAlert,
     ModalContent,
@@ -21,7 +22,9 @@
 
   $: nameError =
     nameTouched && !name ? "Please specify a name for the automation." : null
-  $: triggers = Object.entries($automationStore.blockDefinitions.TRIGGER)
+  $: triggers = Object.entries(
+    $automationStore.blockDefinitions.CREATABLE_TRIGGER
+  )
 
   async function createAutomation() {
     try {
@@ -30,11 +33,12 @@
         triggerVal.stepId,
         triggerVal
       )
-      await automationStore.actions.create(name, trigger)
+      const automation = await automationStore.actions.create(name, trigger)
       if (triggerVal.stepId === TriggerStepID.WEBHOOK) {
         webhookModal.show()
       }
       notifications.success(`Automation ${name} created`)
+      $goto(`../automation/${automation._id}`)
     } catch (error) {
       notifications.error("Error creating automation")
     }
@@ -46,6 +50,8 @@
   }
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <ModalContent
   title="Create Automation"
   confirmText="Save"

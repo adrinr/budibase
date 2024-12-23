@@ -8,6 +8,7 @@
   import Link from "../../Link/Link.svelte"
   import Tag from "../../Tags/Tag.svelte"
   import Tags from "../../Tags/Tags.svelte"
+  import ProgressCircle from "../../ProgressCircle/ProgressCircle.svelte"
 
   const BYTES_IN_KB = 1000
   const BYTES_IN_MB = 1000000
@@ -22,7 +23,6 @@
   export let handleFileTooLarge = null
   export let handleTooManyFiles = null
   export let gallery = true
-  export let error = null
   export let fileTags = []
   export let maximum = null
   export let extensions = "*"
@@ -38,13 +38,16 @@
     "svg",
     "bmp",
     "jfif",
+    "webp",
   ]
-
   const fieldId = id || uuid()
+
   let selectedImageIdx = 0
   let fileDragged = false
   let selectedUrl
   let fileInput
+  let loading = false
+
   $: selectedImage = value?.[selectedImageIdx] ?? null
   $: fileCount = value?.length ?? 0
   $: isImage =
@@ -54,7 +57,7 @@
   $: {
     if (selectedImage?.url) {
       selectedUrl = selectedImage?.url
-    } else if (selectedImage) {
+    } else if (selectedImage && isImage) {
       try {
         let reader = new FileReader()
         reader.readAsDataURL(selectedImage)
@@ -68,7 +71,7 @@
   }
 
   $: showDropzone =
-    (!maximum || (maximum && value?.length < maximum)) && !disabled
+    (!maximum || (maximum && (value?.length || 0) < maximum)) && !disabled
 
   async function processFileList(fileList) {
     if (
@@ -86,10 +89,15 @@
     }
 
     if (processFiles) {
-      const processedFiles = await processFiles(fileList)
-      const newValue = [...value, ...processedFiles]
-      dispatch("change", newValue)
-      selectedImageIdx = newValue.length - 1
+      loading = true
+      try {
+        const processedFiles = await processFiles(fileList)
+        const newValue = [...value, ...processedFiles]
+        dispatch("change", newValue)
+        selectedImageIdx = newValue.length - 1
+      } finally {
+        loading = false
+      }
     } else {
       dispatch("change", fileList)
     }
@@ -138,6 +146,9 @@
   }
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 <div class="container" class:compact>
   {#if selectedImage}
     {#if gallery}
@@ -195,7 +206,9 @@
         >
           <Icon name="ChevronRight" />
         </div>
-        <div class="footer">File {selectedImageIdx + 1} of {fileCount}</div>
+        {#if maximum !== 1}
+          <div class="footer">File {selectedImageIdx + 1} of {fileCount}</div>
+        {/if}
       </div>
     {:else if value?.length}
       {#each value as file}
@@ -222,8 +235,7 @@
   {#if showDropzone}
     <div
       class="spectrum-Dropzone"
-      class:is-invalid={!!error}
-      class:disabled
+      class:disabled={disabled || loading}
       role="region"
       tabindex="0"
       on:dragover={handleDragOver}
@@ -237,7 +249,7 @@
           id={fieldId}
           {disabled}
           type="file"
-          multiple
+          multiple={maximum !== 1}
           accept={extensions}
           bind:this={fileInput}
           on:change={handleFile}
@@ -335,6 +347,12 @@
           {/if}
         {/if}
       </div>
+
+      {#if loading}
+        <div class="loading">
+          <ProgressCircle size="M" />
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -350,9 +368,6 @@
   .gallery,
   .spectrum-Dropzone {
     user-select: none;
-  }
-  .spectrum-Dropzone.is-invalid {
-    border-color: var(--spectrum-global-color-red-400);
   }
   input[type="file"] {
     display: none;
@@ -395,6 +410,11 @@
     padding: 6px 10px;
     margin-bottom: 8px;
   }
+
+  .compact .placeholder {
+    height: fit-content;
+  }
+
   .title {
     display: flex;
     flex-direction: row;
@@ -458,6 +478,7 @@
 
   .spectrum-Dropzone {
     height: 220px;
+    position: relative;
   }
   .compact .spectrum-Dropzone {
     height: 40px;
@@ -481,5 +502,15 @@
   }
   .tag {
     margin-top: 8px;
+  }
+
+  .loading {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    height: 100%;
+    width: 100%;
+    top: 0;
+    left: 0;
   }
 </style>

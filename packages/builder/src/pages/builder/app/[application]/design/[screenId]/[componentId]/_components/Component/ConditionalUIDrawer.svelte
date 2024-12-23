@@ -12,11 +12,10 @@
   import { dndzone } from "svelte-dnd-action"
   import { generate } from "shortid"
   import DrawerBindableInput from "components/common/bindings/DrawerBindableInput.svelte"
-  import { LuceneUtils, Constants } from "@budibase/frontend-core"
-  import { selectedComponent } from "builderStore"
+  import { QueryUtils, Constants } from "@budibase/frontend-core"
+  import { selectedComponent, componentStore } from "stores/builder"
   import { getComponentForSetting } from "components/design/settings/componentSettings"
   import PropertyControl from "components/design/settings/controls/PropertyControl.svelte"
-  import { getComponentSettings } from "builderStore/componentUtils"
 
   export let conditions = []
   export let bindings = []
@@ -56,11 +55,13 @@
   ]
 
   let dragDisabled = true
-  $: settings = getComponentSettings($selectedComponent?._component)?.concat({
-    label: "Custom CSS",
-    key: "_css",
-    type: "text",
-  })
+  $: settings = componentStore
+    .getComponentSettings($selectedComponent?._component)
+    ?.concat({
+      label: "Custom CSS",
+      key: "_css",
+      type: "text",
+    })
   $: settingOptions = settings
     .filter(setting => setting.supportsConditions !== false)
     .map(setting => ({
@@ -118,7 +119,7 @@
   }
 
   const getOperatorOptions = condition => {
-    return LuceneUtils.getValidOperatorsForType({ type: condition.valueType })
+    return QueryUtils.getValidOperatorsForType({ type: condition.valueType })
   }
 
   const onOperatorChange = (condition, newOperator) => {
@@ -137,7 +138,7 @@
     condition.referenceValue = null
 
     // Ensure a valid operator is set
-    const validOperators = LuceneUtils.getValidOperatorsForType({
+    const validOperators = QueryUtils.getValidOperatorsForType({
       type: newType,
     }).map(x => x.value)
     if (!validOperators.includes(condition.operator)) {
@@ -146,8 +147,18 @@
       onOperatorChange(condition, condition.operator)
     }
   }
+
+  const onSettingChange = (e, condition) => {
+    const setting = settings.find(x => x.key === e.detail)
+    if (setting?.defaultValue != null) {
+      condition.settingValue = setting.defaultValue
+    } else {
+      delete condition.settingValue
+    }
+  }
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <DrawerContent>
   <div class="container">
     <Layout noPadding>
@@ -187,6 +198,7 @@
                 <Select
                   options={settingOptions}
                   bind:value={condition.setting}
+                  on:change={e => onSettingChange(e, condition)}
                 />
                 <div>TO</div>
                 {#if definition}

@@ -16,7 +16,7 @@
 
   export let showOnboardingTypeModal
 
-  const password = Math.random().toString(36).substring(2, 22)
+  const password = generatePassword(12)
   let disabled
   let userGroups = []
 
@@ -29,10 +29,11 @@
     },
   ]
   $: hasError = userData.find(x => x.error != null)
-
   $: userCount = $licensing.userCount + userData.length
   $: reached = licensing.usersLimitReached(userCount)
   $: exceeded = licensing.usersLimitExceeded(userCount)
+
+  $: internalGroups = $groups?.filter(g => !g?.scimInfo?.isSync)
 
   function removeInput(idx) {
     userData = userData.filter((e, i) => i !== idx)
@@ -43,7 +44,7 @@
       {
         email: "",
         role: "appUser",
-        password: Math.random().toString(36).substring(2, 22),
+        password: generatePassword(12),
         forceResetPassword: true,
         error: null,
       },
@@ -66,6 +67,14 @@
       userData[index].error = "Please enter an email address"
     }
     return userData[index].error == null
+  }
+
+  function generatePassword(length) {
+    const array = new Uint8Array(length)
+    window.crypto.getRandomValues(array)
+    return Array.from(array, byte => byte.toString(36).padStart(2, "0"))
+      .join("")
+      .slice(0, length)
   }
 
   const onConfirm = () => {
@@ -98,7 +107,7 @@
         align-items: center;
         flex-direction: row;"
       >
-        <div style="width: 90%">
+        <div style="flex: 1 1 auto;">
           <InputDropdown
             inputType="email"
             bind:inputValue={input.email}
@@ -134,12 +143,12 @@
     {/if}
   </Layout>
 
-  {#if $licensing.groupsEnabled}
+  {#if $licensing.groupsEnabled && internalGroups?.length}
     <Multiselect
       bind:value={userGroups}
       placeholder="No groups"
       label="Groups"
-      options={$groups}
+      options={internalGroups}
       getOptionLabel={option => option.name}
       getOptionValue={option => option._id}
     />

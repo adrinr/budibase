@@ -1,10 +1,15 @@
 <html>
-
+  <script nonce="{{ nonce }}">
+    document.fonts.ready.then(() => {
+      window.parent.postMessage({ type: "docLoaded" });
+    })
+  </script>
   <head>
     {{{head}}}
+    <style>{{{css}}}</style>
   </head>
 
-  <script>
+  <script nonce="{{ nonce }}">
     window["##BUDIBASE_APP_ID##"] = "{{appId}}"
     window["##BUDIBASE_APP_EMBEDDED##"] = "{{embedded}}"
   </script>

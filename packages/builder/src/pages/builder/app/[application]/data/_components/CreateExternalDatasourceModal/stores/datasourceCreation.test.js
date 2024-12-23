@@ -4,8 +4,6 @@ import {
   createDatasourceCreationStore,
 } from "./datasourceCreation"
 import { get } from "svelte/store"
-// eslint-disable-next-line no-unused-vars
-import { shouldIntegrationFetchTableNames } from "stores/selectors"
 
 vi.mock("stores/selectors", () => ({
   shouldIntegrationFetchTableNames: vi.fn(),
@@ -14,7 +12,6 @@ vi.mock("stores/selectors", () => ({
 describe("datasource creation store", () => {
   beforeEach(ctx => {
     vi.clearAllMocks()
-    // eslint-disable-next-line no-import-assign
     ctx.store = createDatasourceCreationStore()
 
     ctx.integration = { data: "integration" }

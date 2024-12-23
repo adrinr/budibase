@@ -25,6 +25,8 @@
     },
   ]
 
+  const MAX_DURATION = 120000 // Maximum duration in milliseconds (2 minutes)
+
   onMount(() => {
     if (!parameters.type) {
       parameters.type = "success"
@@ -33,6 +35,14 @@
       parameters.autoDismiss = true
     }
   })
+
+  function handleDurationChange(event) {
+    let newDuration = event.detail
+    if (newDuration > MAX_DURATION) {
+      newDuration = MAX_DURATION
+    }
+    parameters.duration = newDuration
+  }
 </script>
 
 <div class="root">
@@ -40,12 +50,23 @@
   <Select bind:value={parameters.type} options={types} placeholder={null} />
   <Label>Message</Label>
   <DrawerBindableInput
+    title="Message"
     {bindings}
     value={parameters.message}
     on:change={e => (parameters.message = e.detail)}
   />
   <Label />
   <Checkbox text="Auto dismiss" bind:value={parameters.autoDismiss} />
+  {#if parameters.autoDismiss}
+    <Label>Duration (ms)</Label>
+    <DrawerBindableInput
+      title="Duration"
+      {bindings}
+      value={parameters.duration}
+      placeholder="3000"
+      on:change={handleDurationChange}
+    />
+  {/if}
 </div>
 
 <style>

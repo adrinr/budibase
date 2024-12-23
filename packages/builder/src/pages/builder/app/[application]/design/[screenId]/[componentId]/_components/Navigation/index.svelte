@@ -1,37 +1,57 @@
 <script>
-  import LinksEditor from "./LinksEditor.svelte"
+  import NavItemConfiguration from "./NavItemConfiguration.svelte"
   import { get } from "svelte/store"
   import Panel from "components/design/Panel.svelte"
   import {
-    Detail,
     Toggle,
-    Body,
-    Icon,
-    ColorPicker,
-    Input,
-    Label,
-    ActionGroup,
-    ActionButton,
+    DetailSummary,
     Checkbox,
     notifications,
     Select,
   } from "@budibase/bbui"
-  import { selectedScreen, store } from "builderStore"
+  import {
+    themeStore,
+    selectedScreen,
+    screenStore,
+    componentStore,
+    navigationStore as nav,
+  } from "stores/builder"
   import { DefaultAppTheme } from "constants"
+  import PropertyControl from "components/design/settings/controls/PropertyControl.svelte"
+  import BarButtonList from "components/design/settings/controls/BarButtonList.svelte"
+  import ColorPicker from "components/design/settings/controls/ColorPicker.svelte"
+  import DrawerBindableInput from "components/common/bindings/DrawerBindableInput.svelte"
+  import DrawerBindableCombobox from "components/common/bindings/DrawerBindableCombobox.svelte"
+  import { getBindableProperties } from "dataBinding"
 
-  const updateShowNavigation = async e => {
-    await store.actions.screens.updateSetting(
-      get(selectedScreen),
-      "showNavigation",
-      e.detail
-    )
+  const positionOptions = [
+    { value: "Top", barIcon: "PaddingTop" },
+    { value: "Left", barIcon: "PaddingLeft" },
+  ]
+  const alignmentOptions = [
+    { value: "Left", barIcon: "TextAlignLeft" },
+    { value: "Center", barIcon: "TextAlignCenter" },
+    { value: "Right", barIcon: "TextAlignRight" },
+  ]
+  const widthOptions = ["Max", "Large", "Medium", "Small"]
+
+  $: bindings = getBindableProperties(
+    $selectedScreen,
+    $componentStore.selectedComponentId
+  )
+  $: screenRouteOptions = $screenStore.screens
+    .map(screen => screen.routing?.route)
+    .filter(x => x != null)
+
+  const updateShowNavigation = async show => {
+    await screenStore.updateSetting(get(selectedScreen), "showNavigation", show)
   }
 
   const update = async (key, value) => {
     try {
-      let navigation = $store.navigation
+      let navigation = $nav
       navigation[key] = value
-      await store.actions.navigation.save(navigation)
+      await nav.save(navigation)
     } catch (error) {
       notifications.error("Error updating navigation settings")
     }
@@ -40,186 +60,146 @@
 
 <Panel
   title="Navigation"
-  icon={$selectedScreen.showNavigation ? "Visibility" : "VisibilityOff"}
+  icon={$selectedScreen?.showNavigation ? "Visibility" : "VisibilityOff"}
   borderLeft
   wide
 >
-  <div class="generalSection">
-    <div class="subheading">
-      <Detail>General</Detail>
-    </div>
-    <div class="toggle">
-      <Toggle
-        on:change={updateShowNavigation}
-        value={$selectedScreen.showNavigation}
-      />
-      <Body size="S">Show nav on this screen</Body>
-    </div>
-  </div>
+  <DetailSummary name="General" initiallyShow collapsible={false}>
+    <PropertyControl
+      control={Toggle}
+      props={{ text: "Show nav on this screen" }}
+      onChange={updateShowNavigation}
+      value={$selectedScreen?.showNavigation}
+    />
+  </DetailSummary>
 
-  {#if $selectedScreen.showNavigation}
-    <div class="divider" />
-    <div class="customizeSection">
-      <div class="subheading">
-        <Detail>Customize</Detail>
-      </div>
-      <div class="info">
-        <Icon name="InfoOutline" size="S" />
-        <Body size="S">These settings apply to all screens</Body>
-      </div>
-      <div class="configureLinks">
-        <LinksEditor />
-      </div>
-      <div class="controls">
-        <div class="label">
-          <Label size="M">Position</Label>
-        </div>
-        <ActionGroup quiet>
-          <ActionButton
-            selected={$store.navigation.navigation === "Top"}
-            quiet={$store.navigation.navigation !== "Top"}
-            icon="PaddingTop"
-            on:click={() => update("navigation", "Top")}
+  {#if $selectedScreen?.showNavigation}
+    <DetailSummary name="Customize" initiallyShow collapsible={false}>
+      <NavItemConfiguration {bindings} />
+      <div class="settings">
+        <PropertyControl
+          label="Position"
+          control={BarButtonList}
+          onChange={position => update("navigation", position)}
+          value={$nav.navigation}
+          props={{
+            options: positionOptions,
+          }}
+        />
+        {#if $nav.navigation === "Top"}
+          <PropertyControl
+            label="Sticky header"
+            control={Checkbox}
+            value={$nav.sticky}
+            onChange={sticky => update("sticky", sticky)}
           />
-          <ActionButton
-            selected={$store.navigation.navigation === "Left"}
-            quiet={$store.navigation.navigation !== "Left"}
-            icon="PaddingLeft"
-            on:click={() => update("navigation", "Left")}
+          <PropertyControl
+            label="Width"
+            control={Select}
+            onChange={position => update("navWidth", position)}
+            value={$nav.navWidth}
+            props={{
+              placeholder: null,
+              options: widthOptions,
+            }}
           />
-        </ActionGroup>
+        {/if}
+        <PropertyControl
+          label="Show title"
+          control={Checkbox}
+          value={!$nav.hideTitle}
+          onChange={show => update("hideTitle", !show)}
+        />
+        {#if !$nav.hideTitle}
+          <PropertyControl
+            label="Title"
+            control={DrawerBindableInput}
+            value={$nav.title}
+            onChange={title => update("title", title)}
+            {bindings}
+            props={{
+              updateOnChange: false,
+            }}
+          />
+          <PropertyControl
+            label="Text align"
+            control={BarButtonList}
+            onChange={align => update("textAlign", align)}
+            value={$nav.textAlign}
+            props={{
+              options: alignmentOptions,
+            }}
+          />
+        {/if}
+        <PropertyControl
+          label="Background"
+          control={ColorPicker}
+          onChange={color => update("navBackground", color)}
+          value={$nav.navBackground || DefaultAppTheme.navBackground}
+          props={{
+            spectrumTheme: $themeStore.theme,
+          }}
+        />
+        <PropertyControl
+          label="Text"
+          control={ColorPicker}
+          onChange={color => update("navTextColor", color)}
+          value={$nav.navTextColor || DefaultAppTheme.navTextColor}
+          props={{
+            spectrumTheme: $themeStore.theme,
+          }}
+        />
+      </div>
+    </DetailSummary>
 
-        {#if $store.navigation.navigation === "Top"}
-          <div class="label">
-            <Label size="M">Sticky header</Label>
-          </div>
-          <Checkbox
-            value={$store.navigation.sticky}
-            on:change={e => update("sticky", e.detail)}
-          />
-          <div class="label">
-            <Label size="M">Width</Label>
-          </div>
-          <Select
-            options={["Max", "Large", "Medium", "Small"]}
-            plaveholder={null}
-            value={$store.navigation.navWidth}
-            on:change={e => update("navWidth", e.detail)}
-          />
-        {/if}
-        <div class="label">
-          <Label size="M">Show logo</Label>
-        </div>
-        <Checkbox
-          value={!$store.navigation.hideLogo}
-          on:change={e => update("hideLogo", !e.detail)}
+    <DetailSummary name="Logo" initiallyShow collapsible={false}>
+      <div class="settings">
+        <PropertyControl
+          label="Show logo"
+          control={Checkbox}
+          value={!$nav.hideLogo}
+          onChange={show => update("hideLogo", !show)}
         />
-        {#if !$store.navigation.hideLogo}
-          <div class="label">
-            <Label size="M">Logo URL</Label>
-          </div>
-          <Input
-            value={$store.navigation.logoUrl}
-            on:change={e => update("logoUrl", e.detail)}
-            updateOnChange={false}
+        {#if !$nav.hideLogo}
+          <PropertyControl
+            label="Logo image URL"
+            control={DrawerBindableInput}
+            value={$nav.logoUrl}
+            onChange={url => update("logoUrl", url)}
+            {bindings}
+            props={{
+              updateOnChange: false,
+            }}
           />
-        {/if}
-        <div class="label">
-          <Label size="M">Show title</Label>
-        </div>
-        <Checkbox
-          value={!$store.navigation.hideTitle}
-          on:change={e => update("hideTitle", !e.detail)}
-        />
-        {#if !$store.navigation.hideTitle}
-          <div class="label">
-            <Label size="M">Title</Label>
-          </div>
-          <Input
-            value={$store.navigation.title}
-            on:change={e => update("title", e.detail)}
-            updateOnChange={false}
+          <PropertyControl
+            label="Logo link URL"
+            control={DrawerBindableCombobox}
+            value={$nav.logoLinkUrl}
+            onChange={url => update("logoLinkUrl", url)}
+            {bindings}
+            props={{
+              appendBindingsAsOptions: false,
+              options: screenRouteOptions,
+            }}
+          />
+          <PropertyControl
+            label="New tab"
+            control={Checkbox}
+            value={$nav.openLogoLinkInNewTab}
+            onChange={show => update("openLogoLinkInNewTab", show)}
           />
         {/if}
-        <div class="label">
-          <Label>Background</Label>
-        </div>
-        <ColorPicker
-          spectrumTheme={$store.theme}
-          value={$store.navigation.navBackground ||
-            DefaultAppTheme.navBackground}
-          on:change={e => update("navBackground", e.detail)}
-        />
-        <div class="label">
-          <Label>Text</Label>
-        </div>
-        <ColorPicker
-          spectrumTheme={$store.theme}
-          value={$store.navigation.navTextColor || DefaultAppTheme.navTextColor}
-          on:change={e => update("navTextColor", e.detail)}
-        />
       </div>
-    </div>
+    </DetailSummary>
   {/if}
 </Panel>
 
 <style>
-  .generalSection {
-    padding: 13px 13px 25px;
-  }
-
-  .customizeSection {
-    padding: 13px 13px 25px;
-  }
-  .subheading {
-    margin-bottom: 10px;
-  }
-
-  .subheading :global(p) {
-    color: var(--grey-6);
-  }
-
-  .toggle {
+  .settings {
     display: flex;
-    align-items: center;
-  }
-
-  .divider {
-    border-top: 1px solid var(--grey-3);
-  }
-
-  .controls {
-    position: relative;
-    display: grid;
-    grid-template-columns: 90px 1fr;
-    align-items: start;
-    transition: background 130ms ease-out, border-color 130ms ease-out;
-    border-left: 4px solid transparent;
-    margin: 0 calc(-1 * var(--spacing-xl));
-    padding: 0 var(--spacing-xl) 0 calc(var(--spacing-xl) - 4px);
-    gap: 12px;
-  }
-
-  .label {
-    margin-top: 16px;
-    transform: translateY(-50%);
-  }
-
-  .info {
-    background-color: var(--background-alt);
-    padding: 12px;
-    display: flex;
-    border-radius: 4px;
-    gap: 4px;
-    margin-bottom: 16px;
-  }
-  .info :global(svg) {
-    margin-right: 5px;
-    color: var(--spectrum-global-color-gray-600);
-  }
-
-  .configureLinks :global(button) {
-    margin-bottom: 20px;
-    width: 100%;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    gap: 8px;
   }
 </style>

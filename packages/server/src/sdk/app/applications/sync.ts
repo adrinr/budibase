@@ -3,14 +3,14 @@ import { db as dbCore, context, logging, roles } from "@budibase/backend-core"
 import { User, ContextUser, UserGroup } from "@budibase/types"
 import { sdk as proSdk } from "@budibase/pro"
 import sdk from "../../"
-import {
-  getGlobalUsers,
-  getRawGlobalUsers,
-  processUser,
-} from "../../../utilities/global"
+import { getRawGlobalUsers, processUser } from "../../../utilities/global"
 import { generateUserMetadataID, InternalTables } from "../../../db/utils"
 
 type DeletedUser = { _id: string; deleted: boolean }
+
+function userSyncEnabled() {
+  return !env.DISABLE_USER_SYNC
+}
 
 async function syncUsersToApp(
   appId: string,
@@ -60,7 +60,7 @@ async function syncUsersToApp(
 
       // the user doesn't exist, or doesn't have a role anymore
       // get rid of their metadata
-      if (deletedUser || !roleId) {
+      if (userSyncEnabled() && (deletedUser || !roleId)) {
         await db.remove(metadata)
         continue
       }
@@ -113,7 +113,7 @@ export async function syncUsersToAllApps(userIds: string[]) {
 export async function syncApp(
   appId: string,
   opts?: { automationOnly?: boolean }
-) {
+): Promise<{ message: string }> {
   if (env.DISABLE_AUTO_PROD_APP_SYNC) {
     return {
       message:
@@ -153,7 +153,9 @@ export async function syncApp(
   }
 
   // sync the users - kept for safe keeping
-  await sdk.users.syncGlobalUsers()
+  if (userSyncEnabled()) {
+    await sdk.users.syncGlobalUsers()
+  }
 
   if (error) {
     throw error

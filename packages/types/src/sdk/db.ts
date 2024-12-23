@@ -1,10 +1,17 @@
-import Nano from "@budibase/nano"
-import { AllDocsResponse, AnyDocument, Document, ViewTemplateOpts } from "../"
+import type Nano from "@budibase/nano"
+import {
+  AllDocsResponse,
+  AnyDocument,
+  Document,
+  RowValue,
+  SqlQueryBinding,
+  ViewTemplateOpts,
+} from "../"
 import { Writable } from "stream"
+import type PouchDB from "pouchdb-find"
 
 export enum SearchIndex {
   ROWS = "rows",
-  AUDIT = "audit",
   USER = "user",
 }
 
@@ -121,30 +128,43 @@ export interface Database {
   name: string
 
   exists(): Promise<boolean>
-  checkSetup(): Promise<Nano.DocumentScope<any>>
+  exists(docId: string): Promise<boolean>
+  /**
+   * @deprecated the plan is to get everything using `tryGet` instead, then rename
+   * `tryGet` to `get`.
+   */
   get<T extends Document>(id?: string): Promise<T>
+  tryGet<T extends Document>(id?: string): Promise<T | undefined>
   getMultiple<T extends Document>(
     ids: string[],
-    opts?: { allowMissing?: boolean }
+    opts?: { allowMissing?: boolean; excludeDocs?: boolean }
   ): Promise<T[]>
-  remove(
-    id: string | Document,
-    rev?: string
-  ): Promise<Nano.DocumentDestroyResponse>
+  remove(idOrDoc: Document): Promise<Nano.DocumentDestroyResponse>
+  remove(idOrDoc: string, rev?: string): Promise<Nano.DocumentDestroyResponse>
+  bulkRemove(
+    documents: Document[],
+    opts?: { silenceErrors?: boolean }
+  ): Promise<void>
   put(
     document: AnyDocument,
     opts?: DatabasePutOpts
   ): Promise<Nano.DocumentInsertResponse>
   bulkDocs(documents: AnyDocument[]): Promise<Nano.DocumentBulkResponse[]>
-  allDocs<T extends Document>(
+  sql<T extends Document>(
+    sql: string,
+    parameters?: SqlQueryBinding
+  ): Promise<T[]>
+  sqlPurgeDocument(docIds: string[] | string): Promise<void>
+  sqlDiskCleanup(): Promise<void>
+  allDocs<T extends Document | RowValue>(
     params: DatabaseQueryOpts
   ): Promise<AllDocsResponse<T>>
   query<T extends Document>(
     viewName: string,
     params: DatabaseQueryOpts
   ): Promise<AllDocsResponse<T>>
-  destroy(): Promise<Nano.OkResponse | void>
-  compact(): Promise<Nano.OkResponse | void>
+  destroy(): Promise<Nano.OkResponse>
+  compact(): Promise<Nano.OkResponse>
   // these are all PouchDB related functions that are rarely used - in future
   // should be replaced by better typed/non-pouch implemented methods
   dump(stream: Writable, opts?: DatabaseDumpOpts): Promise<any>
@@ -152,4 +172,14 @@ export interface Database {
   createIndex(...args: any[]): Promise<any>
   deleteIndex(...args: any[]): Promise<any>
   getIndexes(...args: any[]): Promise<any>
+}
+
+export interface DBError extends Error {
+  status: number
+  statusCode: number
+  reason: string
+  name: string
+  errid: string
+  error: string
+  description: string
 }

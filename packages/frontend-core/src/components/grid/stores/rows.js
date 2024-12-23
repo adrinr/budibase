@@ -1,8 +1,17 @@
 import { writable, derived, get } from "svelte/store"
 import { fetchData } from "../../../fetch"
 import { NewRowID, RowPageSize } from "../lib/constants"
+import {
+  generateRowID,
+  getCellID,
+  isGeneratedRowID,
+  parseCellID,
+} from "../lib/utils"
 import { tick } from "svelte"
 import { Helpers } from "@budibase/bbui"
+import { sleep } from "../../../utils/utils"
+import { FieldType } from "@budibase/types"
+import { getRelatedTableValues } from "../../../utils"
 
 export const createStores = () => {
   const rows = writable([])
@@ -15,15 +24,6 @@ export const createStores = () => {
   const error = writable(null)
   const fetch = writable(null)
 
-  // Generate a lookup map to quick find a row by ID
-  const rowLookupMap = derived(rows, $rows => {
-    let map = {}
-    for (let i = 0; i < $rows.length; i++) {
-      map[$rows[i]._id] = i
-    }
-    return map
-  })
-
   // Mark loaded as true if we've ever stopped loading
   let hasStartedLoading = false
   loading.subscribe($loading => {
@@ -34,25 +34,9 @@ export const createStores = () => {
     }
   })
 
-  // Enrich rows with an index property and any pending changes
-  const enrichedRows = derived(
-    [rows, rowChangeCache],
-    ([$rows, $rowChangeCache]) => {
-      return $rows.map((row, idx) => ({
-        ...row,
-        ...$rowChangeCache[row._id],
-        __idx: idx,
-      }))
-    }
-  )
-
   return {
-    rows: {
-      ...rows,
-      subscribe: enrichedRows.subscribe,
-    },
+    rows,
     fetch,
-    rowLookupMap,
     loaded,
     refreshing,
     loading,
@@ -60,6 +44,46 @@ export const createStores = () => {
     inProgressChanges,
     hasNextPage,
     error,
+  }
+}
+
+export const deriveStores = context => {
+  const { rows, enrichedSchema } = context
+
+  // Enrich rows with an index property and any pending changes
+  const enrichedRows = derived(
+    [rows, enrichedSchema],
+    ([$rows, $enrichedSchema]) => {
+      const customColumns = Object.values($enrichedSchema || {}).filter(
+        f => f.related
+      )
+      return $rows.map((row, idx) => ({
+        ...row,
+        __idx: idx,
+        ...customColumns.reduce((map, column) => {
+          const fromField = $enrichedSchema[column.related.field]
+          map[column.name] = getRelatedTableValues(row, column, fromField)
+          return map
+        }, {}),
+      }))
+    }
+  )
+
+  // Generate a lookup map to quick find a row by ID
+  const rowLookupMap = derived(enrichedRows, $enrichedRows => {
+    let map = {}
+    for (let i = 0; i < $enrichedRows.length; i++) {
+      map[$enrichedRows[i]._id] = $enrichedRows[i]
+    }
+    return map
+  })
+
+  return {
+    rows: {
+      ...rows,
+      subscribe: enrichedRows.subscribe,
+    },
+    rowLookupMap,
   }
 }
 
@@ -83,8 +107,9 @@ export const createActions = context => {
     error,
     notifications,
     fetch,
-    isDatasourcePlus,
+    hasBudibaseIdentifiers,
     refreshing,
+    columnLookupMap,
   } = context
   const instanceLoaded = writable(false)
 
@@ -187,15 +212,30 @@ export const createActions = context => {
     fetch.set(newFetch)
   })
 
-  // Gets a row by ID
-  const getRow = id => {
-    const index = get(rowLookupMap)[id]
-    return index >= 0 ? get(rows)[index] : null
-  }
-
   // Handles validation errors from the rows API and updates local validation
   // state, storing error messages against relevant cells
   const handleValidationError = (rowId, error) => {
+    let errorString
+    if (typeof error === "string") {
+      errorString = error
+    } else if (typeof error?.message === "string") {
+      errorString = error.message
+    }
+
+    // If the server doesn't reply with a valid error, assume that the source
+    // of the error is the focused cell's column
+    if (!error?.json?.validationErrors && errorString) {
+      const { field: focusedColumn } = parseCellID(get(focusedCellId))
+      if (focusedColumn) {
+        error = {
+          json: {
+            validationErrors: {
+              [focusedColumn]: error.message,
+            },
+          },
+        }
+      }
+    }
     if (error?.json?.validationErrors) {
       // Normal validation errors
       const keys = Object.keys(error.json.validationErrors)
@@ -214,11 +254,19 @@ export const createActions = context => {
 
       // Process errors for columns that we have
       for (let column of erroredColumns) {
+        // Ensure we have a valid error to display
+        let err = error.json.validationErrors[column]
+        if (Array.isArray(err)) {
+          err = err[0]
+        }
+        if (typeof err !== "string" || !err.length) {
+          error = "Something went wrong"
+        }
+        // Set error against the cell
         validation.actions.setError(
-          `${rowId}-${column}`,
-          `${column} ${error.json.validationErrors[column]}`
+          getCellID(rowId, column),
+          Helpers.capitalise(err)
         )
-
         // Ensure the column is visible
         const index = $columns.findIndex(x => x.name === column)
         if (index !== -1 && !$columns[index].visible) {
@@ -233,22 +281,15 @@ export const createActions = context => {
       for (let column of missingColumns) {
         get(notifications).error(`${column} is required but is missing`)
       }
-
-      // Focus the first cell with an error
-      if (erroredColumns.length) {
-        focusedCellId.set(`${rowId}-${erroredColumns[0]}`)
-      }
     } else {
-      get(notifications).error(error?.message || "An unknown error occurred")
+      get(notifications).error(errorString || "An unknown error occurred")
     }
   }
 
   // Adds a new row
-  const addRow = async (row, idx, bubble = false) => {
+  const addRow = async ({ row, idx, bubble = false, notify = true }) => {
     try {
-      // Create row. Spread row so we can mutate and enrich safely.
-      let newRow = { ...row }
-      newRow = await datasource.actions.addRow(newRow)
+      const newRow = await datasource.actions.addRow(row)
 
       // Update state
       if (idx != null) {
@@ -261,29 +302,85 @@ export const createActions = context => {
         handleNewRows([newRow])
       }
 
-      // Refresh row to ensure data is in the correct format
-      get(notifications).success("Row created successfully")
+      if (notify) {
+        get(notifications).success("Row created successfully")
+      }
       return newRow
     } catch (error) {
       if (bubble) {
         throw error
       } else {
         handleValidationError(NewRowID, error)
+        validation.actions.focusFirstRowError(NewRowID)
       }
     }
   }
 
   // Duplicates a row, inserting the duplicate row after the existing one
   const duplicateRow = async row => {
-    let clone = { ...row }
+    let clone = cleanRow(row)
     delete clone._id
     delete clone._rev
-    delete clone.__idx
     try {
-      return await addRow(clone, row.__idx + 1, true)
+      const duped = await addRow({
+        row: clone,
+        idx: row.__idx + 1,
+        bubble: true,
+        notify: false,
+      })
+      get(notifications).success("Duplicated 1 row")
+      return duped
     } catch (error) {
       handleValidationError(row._id, error)
+      validation.actions.focusFirstRowError(row._id)
     }
+  }
+
+  // Duplicates multiple rows, inserting them after the last source row
+  const bulkDuplicate = async (rowsToDupe, progressCallback) => {
+    // Find index of last row
+    const $rowLookupMap = get(rowLookupMap)
+    const indices = rowsToDupe.map(row => $rowLookupMap[row._id]?.__idx)
+    const index = Math.max(...indices)
+    const count = rowsToDupe.length
+
+    // Clone and clean rows
+    const clones = rowsToDupe.map(row => {
+      let clone = cleanRow(row)
+      delete clone._id
+      delete clone._rev
+      return clone
+    })
+
+    // Create rows
+    let saved = []
+    let failed = 0
+    for (let i = 0; i < count; i++) {
+      try {
+        saved.push(await datasource.actions.addRow(clones[i]))
+        rowCacheMap[saved._id] = true
+        await sleep(50) // Small sleep to ensure we avoid rate limiting
+      } catch (error) {
+        failed++
+        console.error("Duplicating row failed", error)
+      }
+      progressCallback?.((i + 1) / count)
+    }
+
+    // Add to state
+    if (saved.length) {
+      rows.update(state => {
+        return state.toSpliced(index + 1, 0, ...saved)
+      })
+    }
+
+    // Notify user
+    if (failed) {
+      get(notifications).error(`Failed to duplicate ${failed} of ${count} rows`)
+    } else if (saved.length) {
+      get(notifications).success(`Duplicated ${saved.length} rows`)
+    }
+    return saved
   }
 
   // Replaces a row in state with the newly defined row, handling updates,
@@ -292,7 +389,7 @@ export const createActions = context => {
     // Get index of row to check if it exists
     const $rows = get(rows)
     const $rowLookupMap = get(rowLookupMap)
-    const index = $rowLookupMap[id]
+    const index = $rowLookupMap[id]?.__idx
 
     // Process as either an update, addition or deletion
     if (row) {
@@ -327,29 +424,42 @@ export const createActions = context => {
     get(fetch)?.getInitialData()
   }
 
-  // Patches a row with some changes
-  const updateRow = async (rowId, changes, options = { save: true }) => {
-    const $rows = get(rows)
-    const $rowLookupMap = get(rowLookupMap)
-    const index = $rowLookupMap[rowId]
-    const row = $rows[index]
-    if (index == null || !Object.keys(changes || {}).length) {
-      return
+  // Checks if a changeset for a row actually mutates the row or not
+  const changesAreValid = (row, changes) => {
+    const columns = Object.keys(changes || {})
+    if (!row || !columns.length) {
+      return false
     }
 
-    // Abandon if no changes
-    let same = true
-    for (let column of Object.keys(changes)) {
-      if (row[column] !== changes[column]) {
-        same = false
-        break
+    // Ensure there is at least 1 column that creates a difference
+    return columns.some(column => row[column] !== changes[column])
+  }
+
+  // Patches a row with some changes in local state, and returns whether a
+  // valid pending change was made or not
+  const stashRowChanges = (rowId, changes) => {
+    const $rowLookupMap = get(rowLookupMap)
+    const $columnLookupMap = get(columnLookupMap)
+    const row = $rowLookupMap[rowId]
+
+    // Coerce some values into the correct types
+    for (let column of Object.keys(changes || {})) {
+      const type = $columnLookupMap[column]?.schema?.type
+
+      // Stringify objects
+      if (type === FieldType.STRING || type == FieldType.LONGFORM) {
+        if (changes[column] != null && typeof changes[column] !== "string") {
+          changes[column] = JSON.stringify(changes[column])
+        }
       }
     }
-    if (same) {
-      return
+
+    // Check this is a valid change
+    if (!row || !changesAreValid(row, changes)) {
+      return false
     }
 
-    // Immediately update state so that the change is reflected
+    // Add change to cache
     rowChangeCache.update(state => ({
       ...state,
       [rowId]: {
@@ -357,51 +467,149 @@ export const createActions = context => {
         ...changes,
       },
     }))
+    return true
+  }
 
-    // Stop here if we don't want to persist the change
-    if (!options?.save) {
+  // Saves any pending changes to a row, as well as any additional changes
+  // specified
+  const applyRowChanges = async ({
+    rowId,
+    changes = null,
+    updateState = true,
+    handleErrors = true,
+  }) => {
+    const $rowLookupMap = get(rowLookupMap)
+    const row = $rowLookupMap[rowId]
+    if (row == null) {
       return
     }
+    let savedRow
 
     // Save change
     try {
+      // Increment change count for this row
       inProgressChanges.update(state => ({
         ...state,
-        [rowId]: true,
+        [rowId]: (state[rowId] || 0) + 1,
       }))
 
       // Update row
-      const saved = await datasource.actions.updateRow({
-        ...cleanRow(row),
-        ...get(rowChangeCache)[rowId],
-      })
+      const stashedChanges = get(rowChangeCache)[rowId]
+      const newRow = { ...cleanRow(row), ...stashedChanges, ...changes }
+      savedRow = await datasource.actions.updateRow(newRow)
 
-      // Update state after a successful change
-      if (saved?._id) {
-        rows.update(state => {
-          state[index] = saved
-          return state.slice()
-        })
-      } else if (saved?.id) {
+      // Update row state after a successful change
+      if (savedRow?._id) {
+        if (updateState) {
+          rows.update(state => {
+            state[row.__idx] = savedRow
+            return state.slice()
+          })
+        }
+      } else if (savedRow?.id) {
         // Handle users table edge case
-        await refreshRow(saved.id)
+        await refreshRow(savedRow.id)
       }
+
+      // Wipe row change cache for any values which have been saved
+      const liveChanges = get(rowChangeCache)[rowId]
       rowChangeCache.update(state => {
-        delete state[rowId]
+        Object.keys(stashedChanges || {}).forEach(key => {
+          if (stashedChanges[key] === liveChanges?.[key]) {
+            delete state[rowId][key]
+          }
+        })
         return state
       })
     } catch (error) {
-      handleValidationError(rowId, error)
+      if (handleErrors) {
+        handleValidationError(rowId, error)
+        validation.actions.focusFirstRowError(rowId)
+      }
     }
+
+    // Decrement change count for this row
     inProgressChanges.update(state => ({
       ...state,
-      [rowId]: false,
+      [rowId]: (state[rowId] || 1) - 1,
     }))
+    return savedRow
   }
 
   // Updates a value of a row
-  const updateValue = async ({ rowId, column, value, save = true }) => {
-    return await updateRow(rowId, { [column]: value }, { save })
+  const updateValue = async ({ rowId, column, value, apply = true }) => {
+    const success = stashRowChanges(rowId, { [column]: value })
+    if (success && apply) {
+      await applyRowChanges({ rowId })
+    }
+  }
+
+  const bulkUpdate = async (changeMap, progressCallback) => {
+    const rowIds = Object.keys(changeMap || {})
+    const count = rowIds.length
+    if (!count) {
+      return
+    }
+
+    // Update rows
+    const $columnLookupMap = get(columnLookupMap)
+    let updated = []
+    let failed = 0
+    for (let i = 0; i < count; i++) {
+      const rowId = rowIds[i]
+      let changes = changeMap[rowId] || {}
+
+      // Strip any readonly fields from the change set
+      for (let field of Object.keys(changes)) {
+        const column = $columnLookupMap[field]
+        if (columns.actions.isReadonly(column)) {
+          delete changes[field]
+        }
+      }
+      if (!Object.keys(changes).length) {
+        progressCallback?.((i + 1) / count)
+        continue
+      }
+      try {
+        const updatedRow = await applyRowChanges({
+          rowId,
+          changes: changeMap[rowId],
+          updateState: false,
+          handleErrors: false,
+        })
+        if (updatedRow) {
+          updated.push(updatedRow)
+        } else {
+          failed++
+        }
+        await sleep(50) // Small sleep to ensure we avoid rate limiting
+      } catch (error) {
+        failed++
+        console.error("Failed to update row", error)
+      }
+      progressCallback?.((i + 1) / count)
+    }
+
+    // Update state
+    if (updated.length) {
+      const $rowLookupMap = get(rowLookupMap)
+      rows.update(state => {
+        for (let row of updated) {
+          const index = $rowLookupMap[row._id].__idx
+          state[index] = row
+        }
+        return state.slice()
+      })
+    }
+
+    // Notify user
+    if (failed) {
+      const unit = `row${count === 1 ? "" : "s"}`
+      get(notifications).error(`Failed to update ${failed} of ${count} ${unit}`)
+    } else if (updated.length) {
+      const unit = `row${updated.length === 1 ? "" : "s"}`
+      get(notifications).success(`Updated ${updated.length} ${unit}`)
+    }
   }
 
   // Deletes an array of rows
@@ -411,9 +619,7 @@ export const createActions = context => {
     }
 
     // Actually delete rows
-    rowsToDelete.forEach(row => {
-      delete row.__idx
-    })
+    rowsToDelete.forEach(row => delete row.__idx)
     await datasource.actions.deleteRows(rowsToDelete)
 
     // Update state
@@ -428,15 +634,15 @@ export const createActions = context => {
     }
     let rowsToAppend = []
     let newRow
-    const $isDatasourcePlus = get(isDatasourcePlus)
+    const $hasBudibaseIdentifiers = get(hasBudibaseIdentifiers)
     for (let i = 0; i < newRows.length; i++) {
       newRow = newRows[i]
 
       // Ensure we have a unique _id.
-      // This means generating one for non DS+, overriting any that may already
-      // exist as we cannot allow duplicates.
-      if (!$isDatasourcePlus) {
-        newRow._id = Helpers.uuid()
+      // We generate one for non DS+ where required, but trust that any existing
+      // _id values are unique (e.g. Mongo)
+      if (!$hasBudibaseIdentifiers && !newRow._id?.length) {
+        newRow._id = generateRowID()
       }
 
       if (!rowCacheMap[newRow._id]) {
@@ -467,20 +673,13 @@ export const createActions = context => {
     get(fetch)?.nextPage()
   }
 
-  // Checks if we have a row with a certain ID
-  const hasRow = id => {
-    if (id === NewRowID) {
-      return true
-    }
-    return get(rowLookupMap)[id] != null
-  }
-
   // Cleans a row by removing any internal grid metadata from it.
   // Call this before passing a row to any sort of external flow.
   const cleanRow = row => {
     let clone = { ...row }
     delete clone.__idx
-    if (!get(isDatasourcePlus)) {
+    delete clone.__metadata
+    if (!get(hasBudibaseIdentifiers) && isGeneratedRowID(clone._id)) {
       delete clone._id
     }
     return clone
@@ -492,31 +691,54 @@ export const createActions = context => {
       actions: {
         addRow,
         duplicateRow,
-        getRow,
+        bulkDuplicate,
         updateValue,
-        updateRow,
+        applyRowChanges,
         deleteRows,
-        hasRow,
         loadNextPage,
         refreshRow,
         replaceRow,
         refreshData,
         cleanRow,
+        bulkUpdate,
       },
     },
   }
 }
 
 export const initialise = context => {
-  const { rowChangeCache, inProgressChanges, previousFocusedRowId } = context
+  const {
+    rowChangeCache,
+    inProgressChanges,
+    previousFocusedRowId,
+    previousFocusedCellId,
+    rows,
+    validation,
+  } = context
 
   // Wipe the row change cache when changing row
   previousFocusedRowId.subscribe(id => {
     if (id && !get(inProgressChanges)[id]) {
-      rowChangeCache.update(state => {
-        delete state[id]
-        return state
-      })
+      if (Object.keys(get(rowChangeCache)[id] || {}).length) {
+        rowChangeCache.update(state => {
+          delete state[id]
+          return state
+        })
+      }
+    }
+  })
+
+  // Ensure any unsaved changes are saved when changing cell
+  previousFocusedCellId.subscribe(async id => {
+    if (!id) {
+      return
+    }
+    const { rowId, field } = parseCellID(id)
+    const hasChanges = field in (get(rowChangeCache)[rowId] || {})
+    const hasErrors = validation.actions.rowHasErrors(rowId)
+    const isSavingChanges = get(inProgressChanges)[rowId]
+    if (rowId && !hasErrors && hasChanges && !isSavingChanges) {
+      await rows.actions.applyRowChanges({ rowId })
     }
   })
 }

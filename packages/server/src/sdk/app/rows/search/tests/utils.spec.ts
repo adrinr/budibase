@@ -2,9 +2,9 @@ import { searchInputMapping } from "../utils"
 import { db as dbCore } from "@budibase/backend-core"
 import {
   FieldType,
-  FieldTypeSubtypes,
+  BBReferenceFieldSubType,
   INTERNAL_TABLE_SOURCE_ID,
-  SearchParams,
+  RowSearchParams,
   Table,
   TableSourceType,
 } from "@budibase/types"
@@ -19,8 +19,8 @@ const tableWithUserCol: Table = {
   schema: {
     user: {
       name: "user",
-      type: FieldType.BB_REFERENCE,
-      subtype: FieldTypeSubtypes.BB_REFERENCE.USER,
+      type: FieldType.BB_REFERENCE_SINGLE,
+      subtype: BBReferenceFieldSubType.USER,
     },
   },
 }
@@ -35,7 +35,7 @@ const tableWithUsersCol: Table = {
     user: {
       name: "user",
       type: FieldType.BB_REFERENCE,
-      subtype: FieldTypeSubtypes.BB_REFERENCE.USERS,
+      subtype: BBReferenceFieldSubType.USER,
     },
   },
 }
@@ -47,7 +47,7 @@ describe.each([tableWithUserCol, tableWithUsersCol])(
     const userMedataId = dbCore.generateUserMetadataID(globalUserId)
 
     it("should be able to map ro_ to global user IDs", () => {
-      const params: SearchParams = {
+      const params: RowSearchParams = {
         tableId,
         query: {
           equal: {
@@ -60,7 +60,7 @@ describe.each([tableWithUserCol, tableWithUsersCol])(
     })
 
     it("should handle array of user IDs", () => {
-      const params: SearchParams = {
+      const params: RowSearchParams = {
         tableId,
         query: {
           oneOf: {
@@ -76,8 +76,8 @@ describe.each([tableWithUserCol, tableWithUsersCol])(
     })
 
     it("shouldn't change any other input", () => {
-      const email = "test@test.com"
-      const params: SearchParams = {
+      const email = "test@example.com"
+      const params: RowSearchParams = {
         tableId,
         query: {
           equal: {
@@ -90,10 +90,8 @@ describe.each([tableWithUserCol, tableWithUsersCol])(
     })
 
     it("shouldn't error if no query supplied", () => {
-      const params: any = {
-        tableId,
-      }
-      const output = searchInputMapping(col, params)
+      // @ts-expect-error - intentionally passing in a bad type
+      const output = searchInputMapping(col, { tableId })
       expect(output.query).toBeUndefined()
     })
   }

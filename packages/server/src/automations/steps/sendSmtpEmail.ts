@@ -2,14 +2,16 @@ import { sendSmtpEmail } from "../../utilities/workerRequests"
 import * as automationUtils from "../automationUtils"
 import {
   AutomationActionStepId,
-  AutomationStepSchema,
-  AutomationStepInput,
+  AutomationStepDefinition,
   AutomationStepType,
   AutomationIOType,
   AutomationFeature,
+  AutomationCustomIOType,
+  SmtpEmailStepInputs,
+  BaseAutomationOutputs,
 } from "@budibase/types"
 
-export const definition: AutomationStepSchema = {
+export const definition: AutomationStepDefinition = {
   description: "Send an email using SMTP",
   tagline: "Send SMTP email to {{inputs.to}}",
   icon: "Email",
@@ -72,10 +74,10 @@ export const definition: AutomationStepSchema = {
           title: "Location",
           dependsOn: "addInvite",
         },
-        url: {
-          type: AutomationIOType.STRING,
-          title: "URL",
-          dependsOn: "addInvite",
+        attachments: {
+          type: AutomationIOType.ATTACHMENT,
+          customType: AutomationCustomIOType.MULTI_ATTACHMENTS,
+          title: "Attachments",
         },
       },
       required: ["to", "from", "subject", "contents"],
@@ -96,7 +98,11 @@ export const definition: AutomationStepSchema = {
   },
 }
 
-export async function run({ inputs }: AutomationStepInput) {
+export async function run({
+  inputs,
+}: {
+  inputs: SmtpEmailStepInputs
+}): Promise<BaseAutomationOutputs> {
   let {
     to,
     from,
@@ -110,12 +116,21 @@ export async function run({ inputs }: AutomationStepInput) {
     summary,
     location,
     url,
+    attachments,
   } = inputs
   if (!contents) {
     contents = "<h1>No content</h1>"
   }
-  to = to || undefined
+
   try {
+    if (attachments) {
+      if (Array.isArray(attachments)) {
+        attachments.forEach(item => automationUtils.guardAttachment(item))
+      } else {
+        automationUtils.guardAttachment(attachments)
+      }
+    }
+
     let response = await sendSmtpEmail({
       to,
       from,
@@ -124,6 +139,7 @@ export async function run({ inputs }: AutomationStepInput) {
       cc,
       bcc,
       automation: true,
+      attachments,
       invite: addInvite
         ? {
             startTime,

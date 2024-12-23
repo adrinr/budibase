@@ -1,37 +1,38 @@
 <script>
   import { onMount } from "svelte"
   import { fade, fly } from "svelte/transition"
-  import { store, selectedScreen } from "builderStore"
+  import {
+    previewStore,
+    themeStore,
+    selectedScreen,
+    appStore,
+  } from "stores/builder"
   import { ProgressCircle } from "@budibase/bbui"
 
   $: route = $selectedScreen?.routing.route || "/"
-  $: src = `/${$store.appId}#${route}`
+  $: src = `/${$appStore.appId}#${route}`
 
   const close = () => {
-    store.update(state => ({
-      ...state,
-      showPreview: false,
-    }))
+    previewStore.showPreview(false)
   }
 
   onMount(() => {
     window.isBuilder = true
     window.closePreview = () => {
-      store.update(state => ({
-        ...state,
-        showPreview: false,
-      }))
+      previewStore.showPreview(false)
     }
   })
 </script>
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <div
   class="preview-overlay"
   transition:fade={{ duration: 260 }}
   on:click|self={close}
 >
   <div
-    class="container spectrum {$store.theme}"
+    class="container spectrum {$themeStore.theme}"
     transition:fly={{ duration: 260, y: 130 }}
   >
     <div class="header placeholder" />
@@ -48,7 +49,7 @@
     right: 0;
     left: 0;
     bottom: 0;
-    z-index: 999;
+    z-index: 9000;
     position: absolute;
     background: rgba(255, 255, 255, 0.1);
     display: flex;

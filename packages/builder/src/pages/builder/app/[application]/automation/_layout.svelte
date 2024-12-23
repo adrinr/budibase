@@ -1,6 +1,5 @@
 <script>
   import { Heading, Body, Layout, Button, Modal } from "@budibase/bbui"
-  import { automationStore, selectedAutomation } from "builderStore"
   import AutomationPanel from "components/automation/AutomationPanel/AutomationPanel.svelte"
   import CreateAutomationModal from "components/automation/AutomationPanel/CreateAutomationModal.svelte"
   import CreateWebhookModal from "components/automation/Shared/CreateWebhookModal.svelte"
@@ -8,19 +7,22 @@
   import { onDestroy, onMount } from "svelte"
   import { syncURLToState } from "helpers/urlStateSync"
   import * as routify from "@roxi/routify"
-  import { store } from "builderStore"
+  import {
+    builderStore,
+    automationStore,
+    selectedAutomation,
+  } from "stores/builder"
 
-  $: automationId = $selectedAutomation?._id
-  $: store.actions.websocket.selectResource(automationId)
+  $: automationId = $selectedAutomation?.data?._id
+  $: builderStore.selectResource(automationId)
 
-  // Keep URL and state in sync for selected screen ID
   const stopSyncing = syncURLToState({
     urlParam: "automationId",
     stateKey: "selectedAutomationId",
     validate: id => $automationStore.automations.some(x => x._id === id),
     fallbackUrl: "./index",
     store: automationStore,
-    up: automationStore.actions.select,
+    update: automationStore.actions.select,
     routify,
   })
 
@@ -37,7 +39,7 @@
 <!-- routify:options index=3 -->
 <div class="root">
   <AutomationPanel {modal} {webhookModal} />
-  <div class="content">
+  <div class="content drawer-container">
     {#if $automationStore.automations?.length}
       <slot />
     {:else}
@@ -65,7 +67,7 @@
 
   {#if $automationStore.showTestPanel}
     <div class="setup">
-      <TestPanel automation={$selectedAutomation} />
+      <TestPanel automation={$selectedAutomation.data} />
     </div>
   {/if}
   <Modal bind:this={modal}>
@@ -105,13 +107,11 @@
     justify-content: center;
     align-items: center;
   }
-
   .main {
     width: 300px;
   }
-
   .setup {
-    padding-top: var(--spectrum-global-dimension-size-200);
+    padding-top: 9px;
     border-left: var(--border-light);
     display: flex;
     flex-direction: column;

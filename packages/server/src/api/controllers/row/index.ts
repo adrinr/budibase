@@ -1,23 +1,40 @@
+import stream from "stream"
+import archiver from "archiver"
+
 import { quotas } from "@budibase/pro"
+import { objectStore, context } from "@budibase/backend-core"
 import * as internal from "./internal"
 import * as external from "./external"
 import { isExternalTableID } from "../../../integrations/utils"
 import {
   Ctx,
-  UserCtx,
-  DeleteRowRequest,
   DeleteRow,
+  DeleteRowRequest,
   DeleteRows,
-  Row,
-  PatchRowRequest,
-  PatchRowResponse,
-  SearchRowResponse,
-  SearchRowRequest,
-  SearchParams,
-  GetRowResponse,
-  ValidateResponse,
+  DownloadAttachmentResponse,
+  EventType,
   ExportRowsRequest,
   ExportRowsResponse,
+  FetchEnrichedRowResponse,
+  FetchRowsResponse,
+  FieldType,
+  FindRowResponse,
+  isRelationshipField,
+  PatchRowRequest,
+  PatchRowResponse,
+  RequiredKeys,
+  Row,
+  RowAttachment,
+  RowSearchParams,
+  SaveRowRequest,
+  SaveRowResponse,
+  SearchFilters,
+  SearchRowRequest,
+  SearchRowResponse,
+  Table,
+  UserCtx,
+  ValidateRowRequest,
+  ValidateRowResponse,
 } from "@budibase/types"
 import * as utils from "./utils"
 import { gridSocket } from "../../../websockets"
@@ -25,11 +42,13 @@ import { addRev } from "../public/utils"
 import { fixRow } from "../public/rows"
 import sdk from "../../../sdk"
 import * as exporters from "../view/exporters"
-import { apiFileReturn } from "../../../utilities/fileSystem"
 import { Format } from "../view/exporters"
+import { apiFileReturn } from "../../../utilities/fileSystem"
+import { dataFilters } from "@budibase/shared-core"
+
 export * as views from "./views"
 
-function pickApi(tableId: any) {
+function pickApi(tableId: string) {
   if (isExternalTableID(tableId)) {
     return external
   }
@@ -40,7 +59,7 @@ export async function patch(
   ctx: UserCtx<PatchRowRequest, PatchRowResponse>
 ): Promise<any> {
   const appId = ctx.appId
-  const tableId = utils.getTableId(ctx)
+  const { tableId } = utils.getSourceId(ctx)
   const body = ctx.request.body
 
   // if it doesn't have an _id then its save
@@ -48,18 +67,19 @@ export async function patch(
     return save(ctx)
   }
   try {
-    const { row, table } = await quotas.addQuery(
-      () => pickApi(tableId).patch(ctx),
-      {
-        datasourceId: tableId,
-      }
-    )
+    const { row, table, oldRow } = await pickApi(tableId).patch(ctx)
     if (!row) {
       ctx.throw(404, "Row not found")
     }
-    ctx.status = 200
-    ctx.eventEmitter &&
-      ctx.eventEmitter.emitRow(`row:update`, appId, row, table)
+
+    ctx.eventEmitter?.emitRow({
+      eventName: EventType.ROW_UPDATE,
+      appId,
+      row,
+      table,
+      oldRow,
+      user: sdk.users.getUserContextBindings(ctx.user),
+    })
     ctx.message = `${table.name} updated successfully.`
     ctx.body = row
     gridSocket?.emitRowUpdate(ctx, row)
@@ -68,9 +88,11 @@ export async function patch(
   }
 }
 
-export const save = async (ctx: UserCtx<Row, Row>) => {
+export const save = async (ctx: UserCtx<SaveRowRequest, SaveRowResponse>) => {
+  const { tableId, viewId } = utils.getSourceId(ctx)
+  const sourceId = viewId || tableId
+
   const appId = ctx.appId
-  const tableId = utils.getTableId(ctx)
   const body = ctx.request.body
 
   // user metadata doesn't exist yet - don't allow creation
@@ -82,50 +104,49 @@ export const save = async (ctx: UserCtx<Row, Row>) => {
   if (body && body._id) {
     return patch(ctx as UserCtx<PatchRowRequest, PatchRowResponse>)
   }
-  const { row, table, squashed } = await quotas.addRow(() =>
-    quotas.addQuery(() => pickApi(tableId).save(ctx), {
-      datasourceId: tableId,
-    })
-  )
-  ctx.status = 200
-  ctx.eventEmitter && ctx.eventEmitter.emitRow(`row:save`, appId, row, table)
+  const { row, table, squashed } = tableId.includes("datasource_plus")
+    ? await sdk.rows.save(sourceId, ctx.request.body, ctx.user?._id)
+    : await quotas.addRow(() =>
+        sdk.rows.save(sourceId, ctx.request.body, ctx.user?._id)
+      )
+
+  ctx.eventEmitter?.emitRow({
+    eventName: EventType.ROW_SAVE,
+    appId,
+    row,
+    table,
+    user: sdk.users.getUserContextBindings(ctx.user),
+  })
   ctx.message = `${table.name} saved successfully`
   // prefer squashed for response
   ctx.body = row || squashed
   gridSocket?.emitRowUpdate(ctx, row || squashed)
 }
 
-export async function fetchView(ctx: any) {
-  const tableId = utils.getTableId(ctx)
+export async function fetchLegacyView(ctx: any) {
   const viewName = decodeURIComponent(ctx.params.viewName)
 
   const { calculation, group, field } = ctx.query
 
-  ctx.body = await quotas.addQuery(
-    () =>
-      sdk.rows.fetchView(tableId, viewName, {
-        calculation,
-        group: calculation ? group : null,
-        field,
-      }),
-    {
-      datasourceId: tableId,
-    }
-  )
-}
-
-export async function fetch(ctx: any) {
-  const tableId = utils.getTableId(ctx)
-  ctx.body = await quotas.addQuery(() => sdk.rows.fetch(tableId), {
-    datasourceId: tableId,
+  ctx.body = await sdk.rows.fetchLegacyView(viewName, {
+    calculation,
+    group: calculation ? group : null,
+    field,
   })
 }
 
-export async function find(ctx: UserCtx<void, GetRowResponse>) {
-  const tableId = utils.getTableId(ctx)
-  ctx.body = await quotas.addQuery(() => pickApi(tableId).find(ctx), {
-    datasourceId: tableId,
-  })
+export async function fetch(ctx: UserCtx<void, FetchRowsResponse>) {
+  const { tableId } = utils.getSourceId(ctx)
+  ctx.body = await sdk.rows.fetch(tableId)
+}
+
+export async function find(ctx: UserCtx<void, FindRowResponse>) {
+  const { tableId, viewId } = utils.getSourceId(ctx)
+  const sourceId = viewId || tableId
+  const rowId = ctx.params.rowId
+
+  const response = await sdk.rows.find(sourceId, rowId)
+  ctx.body = response
 }
 
 function isDeleteRows(input: any): input is DeleteRows {
@@ -138,53 +159,61 @@ function isDeleteRow(input: any): input is DeleteRow {
 
 async function processDeleteRowsRequest(ctx: UserCtx<DeleteRowRequest>) {
   let request = ctx.request.body as DeleteRows
-  const tableId = utils.getTableId(ctx)
+  const { tableId } = utils.getSourceId(ctx)
 
   const processedRows = request.rows.map(row => {
-    let processedRow: Row = typeof row == "string" ? { _id: row } : row
+    let processedRow: Row = typeof row == "string" ? { _id: row, tableId } : row
     return !processedRow._rev
       ? addRev(fixRow(processedRow, ctx.params), tableId)
       : fixRow(processedRow, ctx.params)
   })
 
-  return await Promise.all(processedRows)
+  const responses = await Promise.allSettled(processedRows)
+  return responses
+    .filter(resp => resp.status === "fulfilled")
+    .map(resp => (resp as PromiseFulfilledResult<Row>).value)
 }
 
 async function deleteRows(ctx: UserCtx<DeleteRowRequest>) {
-  const tableId = utils.getTableId(ctx)
+  const { tableId } = utils.getSourceId(ctx)
   const appId = ctx.appId
 
   let deleteRequest = ctx.request.body as DeleteRows
 
-  const rowDeletes: Row[] = await processDeleteRowsRequest(ctx)
-  deleteRequest.rows = rowDeletes
+  deleteRequest.rows = await processDeleteRowsRequest(ctx)
 
-  const { rows } = await quotas.addQuery(
-    () => pickApi(tableId).bulkDestroy(ctx),
-    {
-      datasourceId: tableId,
-    }
-  )
-  await quotas.removeRows(rows.length)
-
-  for (let row of rows) {
-    ctx.eventEmitter && ctx.eventEmitter.emitRow(`row:delete`, appId, row)
-    gridSocket?.emitRowDeletion(ctx, row)
+  const { rows } = await pickApi(tableId).bulkDestroy(ctx)
+  if (!tableId.includes("datasource_plus")) {
+    await quotas.removeRows(rows.length)
   }
 
+  for (let row of rows) {
+    ctx.eventEmitter?.emitRow({
+      eventName: EventType.ROW_DELETE,
+      appId,
+      row,
+      user: sdk.users.getUserContextBindings(ctx.user),
+    })
+    gridSocket?.emitRowDeletion(ctx, row)
+  }
   return rows
 }
 
 async function deleteRow(ctx: UserCtx<DeleteRowRequest>) {
   const appId = ctx.appId
-  const tableId = utils.getTableId(ctx)
+  const { tableId } = utils.getSourceId(ctx)
 
-  const resp = await quotas.addQuery(() => pickApi(tableId).destroy(ctx), {
-    datasourceId: tableId,
+  const resp = await pickApi(tableId).destroy(ctx)
+  if (!tableId.includes("datasource_plus")) {
+    await quotas.removeRow()
+  }
+
+  ctx.eventEmitter?.emitRow({
+    eventName: EventType.ROW_DELETE,
+    appId,
+    row: resp.row,
+    user: sdk.users.getUserContextBindings(ctx.user),
   })
-  await quotas.removeRow()
-
-  ctx.eventEmitter && ctx.eventEmitter.emitRow(`row:delete`, appId, resp.row)
   gridSocket?.emitRowDeletion(ctx, resp.row)
 
   return resp
@@ -192,7 +221,6 @@ async function deleteRow(ctx: UserCtx<DeleteRowRequest>) {
 
 export async function destroy(ctx: UserCtx<DeleteRowRequest>) {
   let response, row
-  ctx.status = 200
 
   if (isDeleteRows(ctx.request.body)) {
     response = await deleteRows(ctx)
@@ -211,50 +239,117 @@ export async function destroy(ctx: UserCtx<DeleteRowRequest>) {
 }
 
 export async function search(ctx: Ctx<SearchRowRequest, SearchRowResponse>) {
-  const tableId = utils.getTableId(ctx)
+  const { tableId, viewId } = utils.getSourceId(ctx)
 
-  const searchParams: SearchParams = {
-    ...ctx.request.body,
-    tableId,
+  await context.ensureSnippetContext(true)
+
+  const searchRequest = ctx.request.body
+  let { query } = searchRequest
+  if (query) {
+    const allTables = await sdk.tables.getAllTables()
+    query = replaceTableNamesInFilters(tableId, query, allTables)
   }
 
-  ctx.status = 200
-  ctx.body = await quotas.addQuery(() => sdk.rows.search(searchParams), {
-    datasourceId: tableId,
+  let enrichedQuery: SearchFilters = await utils.enrichSearchContext(query, {
+    user: sdk.users.getUserContextBindings(ctx.user),
+  })
+
+  const searchParams: RequiredKeys<RowSearchParams> = {
+    query: enrichedQuery,
+    tableId,
+    viewId,
+    bookmark: searchRequest.bookmark ?? undefined,
+    paginate: searchRequest.paginate,
+    limit: searchRequest.limit,
+    sort: searchRequest.sort ?? undefined,
+    sortOrder: searchRequest.sortOrder,
+    sortType: searchRequest.sortType ?? undefined,
+    countRows: searchRequest.countRows,
+    version: searchRequest.version,
+    disableEscaping: searchRequest.disableEscaping,
+    fields: undefined,
+    indexer: undefined,
+    rows: undefined,
+  }
+
+  ctx.body = await sdk.rows.search(searchParams)
+}
+
+function replaceTableNamesInFilters(
+  tableId: string,
+  filters: SearchFilters,
+  allTables: Table[]
+): SearchFilters {
+  for (const filter of Object.values(filters)) {
+    for (const key of Object.keys(filter)) {
+      const matches = key.match(`^(?<relation>.+)\\.(?<field>.+)`)
+
+      // this is the possible table name which we need to check if it needs to be converted
+      const relatedTableName = matches?.groups?.["relation"]
+      const field = matches?.groups?.["field"]
+
+      if (!relatedTableName || !field) {
+        continue
+      }
+
+      const table = allTables.find(r => r._id === tableId)
+      const isColumnName = !!table?.schema[relatedTableName]
+      if (!table || isColumnName) {
+        continue
+      }
+
+      const matchedTable = allTables.find(t => t.name === relatedTableName)
+      const relationship = Object.values(table.schema).find(
+        f => isRelationshipField(f) && f.tableId === matchedTable?._id
+      )
+      if (!relationship) {
+        continue
+      }
+
+      const updatedField = `${relationship.name}.${field}`
+      if (updatedField && updatedField !== key) {
+        filter[updatedField] = filter[key]
+        delete filter[key]
+      }
+    }
+  }
+  return dataFilters.recurseLogicalOperators(filters, (f: SearchFilters) => {
+    return replaceTableNamesInFilters(tableId, f, allTables)
   })
 }
 
-export async function validate(ctx: Ctx<Row, ValidateResponse>) {
-  const tableId = utils.getTableId(ctx)
+export async function validate(
+  ctx: Ctx<ValidateRowRequest, ValidateRowResponse>
+) {
+  const source = await utils.getSource(ctx)
+  const table = await utils.getTableFromSource(source)
   // external tables are hard to validate currently
-  if (isExternalTableID(tableId)) {
+  if (isExternalTableID(table._id!)) {
     ctx.body = { valid: true, errors: {} }
   } else {
     ctx.body = await sdk.rows.utils.validate({
       row: ctx.request.body,
-      tableId,
+      source,
     })
   }
 }
 
-export async function fetchEnrichedRow(ctx: any) {
-  const tableId = utils.getTableId(ctx)
-  ctx.body = await quotas.addQuery(
-    () => pickApi(tableId).fetchEnrichedRow(ctx),
-    {
-      datasourceId: tableId,
-    }
-  )
+export async function fetchEnrichedRow(
+  ctx: UserCtx<void, FetchEnrichedRowResponse>
+) {
+  const { tableId } = utils.getSourceId(ctx)
+  ctx.body = await pickApi(tableId).fetchEnrichedRow(ctx)
 }
 
 export const exportRows = async (
   ctx: Ctx<ExportRowsRequest, ExportRowsResponse>
 ) => {
-  const tableId = utils.getTableId(ctx)
+  const { tableId } = utils.getSourceId(ctx)
 
   const format = ctx.query.format
 
-  const { rows, columns, query, sort, sortOrder } = ctx.request.body
+  const { rows, columns, query, sort, sortOrder, delimiter, customHeaders } =
+    ctx.request.body
   if (typeof format !== "string" || !exporters.isFormat(format)) {
     ctx.throw(
       400,
@@ -264,22 +359,81 @@ export const exportRows = async (
     )
   }
 
-  ctx.body = await quotas.addQuery(
-    async () => {
-      const { fileName, content } = await sdk.rows.exportRows({
-        tableId,
-        format: format as Format,
-        rowIds: rows,
-        columns,
-        query,
-        sort,
-        sortOrder,
-      })
-      ctx.attachment(fileName)
-      return apiFileReturn(content)
-    },
-    {
-      datasourceId: tableId,
+  const { fileName, content } = await sdk.rows.exportRows({
+    tableId,
+    format: format as Format,
+    rowIds: rows,
+    columns,
+    query,
+    sort,
+    sortOrder,
+    delimiter,
+    customHeaders,
+  })
+  ctx.attachment(fileName)
+  ctx.body = apiFileReturn(content)
+}
+
+export async function downloadAttachment(
+  ctx: UserCtx<void, DownloadAttachmentResponse>
+) {
+  const { columnName } = ctx.params
+
+  const { tableId } = utils.getSourceId(ctx)
+  const rowId = ctx.params.rowId
+  const row = await sdk.rows.find(tableId, rowId)
+
+  const table = await sdk.tables.getTable(tableId)
+  const columnSchema = table.schema[columnName]
+  if (!columnSchema) {
+    ctx.throw(400, `'${columnName}' is not valid`)
+  }
+
+  const columnType = columnSchema.type
+
+  if (
+    columnType !== FieldType.ATTACHMENTS &&
+    columnType !== FieldType.ATTACHMENT_SINGLE
+  ) {
+    ctx.throw(404, `'${columnName}' is not valid attachment column`)
+  }
+
+  const attachments: RowAttachment[] =
+    columnType === FieldType.ATTACHMENTS ? row[columnName] : [row[columnName]]
+
+  if (!attachments?.length) {
+    ctx.throw(404)
+  }
+
+  if (attachments.length === 1) {
+    const attachment = attachments[0]
+    ctx.attachment(attachment.name)
+    if (attachment.key) {
+      ctx.body = await objectStore.getReadStream(
+        objectStore.ObjectStoreBuckets.APPS,
+        attachment.key
+      )
     }
-  )
+  } else {
+    const passThrough = new stream.PassThrough()
+    const archive = archiver.create("zip")
+    archive.pipe(passThrough)
+
+    for (const attachment of attachments) {
+      if (!attachment.key) {
+        continue
+      }
+      const attachmentStream = await objectStore.getReadStream(
+        objectStore.ObjectStoreBuckets.APPS,
+        attachment.key
+      )
+      archive.append(attachmentStream, { name: attachment.name })
+    }
+
+    const displayName = row[table.primaryDisplay || "_id"]
+    ctx.attachment(`${displayName}_${columnName}.zip`)
+    archive.finalize()
+    ctx.body = passThrough
+    ctx.type = "zip"
+  }
 }

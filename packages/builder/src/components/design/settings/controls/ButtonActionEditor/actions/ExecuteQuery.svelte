@@ -1,6 +1,7 @@
 <script>
-  import { Select, Layout, Input, Checkbox } from "@budibase/bbui"
-  import { datasources, integrations, queries } from "stores/backend"
+  import { Select, Layout, Checkbox } from "@budibase/bbui"
+  import DrawerBindableInput from "components/common/bindings/DrawerBindableInput.svelte"
+  import { datasources, integrations, queries } from "stores/builder"
   import BindingBuilder from "components/integration/QueryBindingBuilder.svelte"
   import IntegrationQueryEditor from "components/integration/index.svelte"
   import {
@@ -58,19 +59,46 @@
       text="Do not display default notification"
       bind:value={parameters.notificationOverride}
     />
-    <br />
     {#if parameters.queryId}
       <Checkbox text="Require confirmation" bind:value={parameters.confirm} />
 
       {#if parameters.confirm}
-        <Input
-          label="Confirm text"
-          placeholder="Are you sure you want to execute this query?"
-          bind:value={parameters.confirmText}
-        />
+        <div class="params">
+          <DrawerBindableInput
+            label="Title"
+            placeholder="Prompt User"
+            value={parameters.customTitleText}
+            on:change={e => (parameters.customTitleText = e.detail)}
+            {bindings}
+          />
+          <DrawerBindableInput
+            label="Message"
+            placeholder="Are you sure you want to continue?"
+            value={parameters.confirmText}
+            on:change={e => (parameters.confirmText = e.detail)}
+            {bindings}
+          />
+
+          <DrawerBindableInput
+            label="Confirm Text"
+            placeholder="Confirm"
+            value={parameters.confirmButtonText}
+            on:change={e => (parameters.confirmButtonText = e.detail)}
+            {bindings}
+          />
+
+          <DrawerBindableInput
+            label="Cancel Text"
+            placeholder="Cancel"
+            value={parameters.cancelButtonText}
+            on:change={e => (parameters.cancelButtonText = e.detail)}
+            {bindings}
+          />
+        </div>
       {/if}
 
       {#if query?.parameters?.length > 0}
+        <br />
         <div class="params">
           <BindingBuilder
             customParams={parameters.queryParams}

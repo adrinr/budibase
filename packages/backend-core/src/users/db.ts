@@ -1,6 +1,5 @@
 import env from "../environment"
 import * as eventHelpers from "./events"
-import * as accounts from "../accounts"
 import * as accountSdk from "../accounts"
 import * as cache from "../cache"
 import { getGlobalDB, getIdentity, getTenantId } from "../context"
@@ -11,25 +10,32 @@ import * as sessions from "../security/sessions"
 import * as usersCore from "./users"
 import {
   Account,
-  AllDocsResponse,
   BulkUserCreated,
   BulkUserDeleted,
   isSSOAccount,
   isSSOUser,
-  RowResponse,
   SaveUserOpts,
   User,
-  UserStatus,
   UserGroup,
+  UserIdentifier,
+  UserStatus,
+  PlatformUserBySsoId,
+  PlatformUserById,
+  AnyDocument,
 } from "@budibase/types"
 import {
-  getAccountHolderFromUserIds,
+  getAccountHolderFromUsers,
   isAdmin,
   isCreator,
   validateUniqueUser,
 } from "./utils"
-import { searchExistingEmails } from "./lookup"
+import {
+  getFirstPlatformUser,
+  getPlatformUsers,
+  searchExistingEmails,
+} from "./lookup"
 import { hash } from "../utils"
+import { validatePassword } from "../security"
 
 type QuotaUpdateFn = (
   change: number,
@@ -45,6 +51,15 @@ type GroupFns = {
   addUsers: GroupUpdateFn
   getBulk: GroupGetFn
   getGroupBuilderAppIds: GroupBuildersFn
+}
+type CreateAdminUserOpts = {
+  password?: string
+  ssoId?: string
+  hashPassword?: boolean
+  requirePassword?: boolean
+  skipPasswordValidation?: boolean
+  firstName?: string
+  lastName?: string
 }
 type FeatureFns = { isSSOEnforced: FeatureFn; isAppBuildersEnabled: FeatureFn }
 
@@ -113,6 +128,14 @@ export class UserDB {
       if (await UserDB.isPreventPasswordActions(user, account)) {
         throw new HTTPError("Password change is disabled for this user", 400)
       }
+
+      if (!opts.skipPasswordValidation) {
+        const passwordValidation = validatePassword(password)
+        if (!passwordValidation.valid) {
+          throw new HTTPError(passwordValidation.error, 400)
+        }
+      }
+
       hashedPassword = opts.hashPassword ? await hash(password) : password
     } else if (dbUser) {
       hashedPassword = dbUser.password
@@ -149,12 +172,12 @@ export class UserDB {
 
   static async allUsers() {
     const db = getGlobalDB()
-    const response = await db.allDocs(
+    const response = await db.allDocs<User>(
       dbUtils.getGlobalUserParams(null, {
         include_docs: true,
       })
     )
-    return response.rows.map((row: any) => row.doc)
+    return response.rows.map(row => row.doc!)
   }
 
   static async countUsersByApp(appId: string) {
@@ -206,28 +229,20 @@ export class UserDB {
     const tenantId = getTenantId()
     const db = getGlobalDB()
 
-    let { email, _id, userGroups = [], roles } = user
+    const { email, _id, userGroups = [], roles } = user
 
     if (!email && !_id) {
       throw new Error("_id or email is required")
-    }
-
-    if (
-      user.builder?.apps?.length &&
-      !(await UserDB.features.isAppBuildersEnabled())
-    ) {
-      throw new Error("Unable to update app builders, please check license")
     }
 
     let dbUser: User | undefined
     if (_id) {
       // try to get existing user from db
       try {
-        dbUser = (await db.get(_id)) as User
-        if (email && dbUser.email !== email) {
-          throw "Email address cannot be changed"
+        dbUser = await usersCore.getById(_id)
+        if (email && dbUser.email !== email && !opts.allowChangingEmail) {
+          throw new Error("Email address cannot be changed")
         }
-        email = dbUser.email
       } catch (e: any) {
         if (e.status === 404) {
           // do nothing, save this new user with the id specified - required for SSO auth
@@ -246,7 +261,8 @@ export class UserDB {
     }
 
     const change = dbUser ? 0 : 1 // no change if there is existing user
-    const creatorsChange = isCreator(dbUser) !== isCreator(user) ? 1 : 0
+    const creatorsChange =
+      (await isCreator(dbUser)) !== (await isCreator(user)) ? 1 : 0
     return UserDB.quotas.addUsers(change, creatorsChange, async () => {
       await validateUniqueUser(email, tenantId)
 
@@ -262,13 +278,13 @@ export class UserDB {
 
       // make sure we set the _id field for a new user
       // Also if this is a new user, associate groups with them
-      let groupPromises = []
+      const groupPromises = []
       if (!_id) {
-        _id = builtUser._id!
-
         if (userGroups.length > 0) {
           for (let groupId of userGroups) {
-            groupPromises.push(UserDB.groups.addUsers(groupId, [_id!]))
+            groupPromises.push(
+              UserDB.groups.addUsers(groupId, [builtUser._id!])
+            )
           }
         }
       }
@@ -279,6 +295,11 @@ export class UserDB {
         builtUser._rev = response.rev
 
         await eventHelpers.handleSaveEvents(builtUser, dbUser)
+        if (dbUser && builtUser.email !== dbUser.email) {
+          // Remove the plaform email reference if the email changed
+          await platform.users.removeUser({ email: dbUser.email } as User)
+        }
+
         await platform.users.addUser(
           tenantId,
           builtUser._id!,
@@ -330,7 +351,7 @@ export class UserDB {
       }
       newUser.userGroups = groups || []
       newUsers.push(newUser)
-      if (isCreator(newUser)) {
+      if (await isCreator(newUser)) {
         newCreators.push(newUser)
       }
     }
@@ -392,7 +413,9 @@ export class UserDB {
     )
   }
 
-  static async bulkDelete(userIds: string[]): Promise<BulkUserDeleted> {
+  static async bulkDelete(
+    users: Array<UserIdentifier>
+  ): Promise<BulkUserDeleted> {
     const db = getGlobalDB()
 
     const response: BulkUserDeleted = {
@@ -401,13 +424,13 @@ export class UserDB {
     }
 
     // remove the account holder from the delete request if present
-    const account = await getAccountHolderFromUserIds(userIds)
-    if (account) {
-      userIds = userIds.filter(u => u !== account.budibaseUserId)
+    const accountHolder = await getAccountHolderFromUsers(users)
+    if (accountHolder) {
+      users = users.filter(u => u.userId !== accountHolder.userId)
       // mark user as unsuccessful
       response.unsuccessful.push({
-        _id: account.budibaseUserId,
-        email: account.email,
+        _id: accountHolder.userId,
+        email: accountHolder.email,
         reason: "Account holder cannot be deleted",
       })
     }
@@ -415,7 +438,7 @@ export class UserDB {
     // Get users and delete
     const allDocsResponse = await db.allDocs<User>({
       include_docs: true,
-      keys: userIds,
+      keys: users.map(u => u.userId),
     })
     const usersToDelete = allDocsResponse.rows.map(user => {
       return user.doc!
@@ -427,12 +450,39 @@ export class UserDB {
       _deleted: true,
     }))
     const dbResponse = await usersCore.bulkUpdateGlobalUsers(toDelete)
-    const creatorsToDelete = usersToDelete.filter(isCreator)
 
+    const creatorsEval = await Promise.all(usersToDelete.map(isCreator))
+    const creatorsToDeleteCount = creatorsEval.filter(
+      creator => !!creator
+    ).length
+
+    const ssoUsersToDelete: AnyDocument[] = []
     for (let user of usersToDelete) {
+      const platformUser = (await getFirstPlatformUser(
+        user._id!
+      )) as PlatformUserById
+      const ssoId = platformUser.ssoId
+      if (ssoId) {
+        // Need to get the _rev of the SSO user doc to delete it. The view also returns docs that have the ssoId property, so we need to ignore those.
+        const ssoUsers = (await getPlatformUsers(
+          ssoId
+        )) as PlatformUserBySsoId[]
+        ssoUsers
+          .filter(user => user.ssoId == null)
+          .forEach(user => {
+            ssoUsersToDelete.push({
+              ...user,
+              _deleted: true,
+            })
+          })
+      }
       await bulkDeleteProcessing(user)
     }
-    await UserDB.quotas.removeUsers(toDelete.length, creatorsToDelete.length)
+
+    // Delete any associated SSO user docs
+    await platform.getPlatformDB().bulkDocs(ssoUsersToDelete)
+
+    await UserDB.quotas.removeUsers(toDelete.length, creatorsToDeleteCount)
 
     // Build Response
     // index users by id
@@ -467,7 +517,7 @@ export class UserDB {
     if (!env.SELF_HOSTED && !env.DISABLE_ACCOUNT_PORTAL) {
       // root account holder can't be deleted from inside budibase
       const email = dbUser.email
-      const account = await accounts.getAccount(email)
+      const account = await accountSdk.getAccount(email)
       if (account) {
         if (dbUser.userId === getIdentity()!._id) {
           throw new HTTPError('Please visit "Account" to delete this user', 400)
@@ -479,13 +529,47 @@ export class UserDB {
 
     await platform.users.removeUser(dbUser)
 
-    await db.remove(userId, dbUser._rev)
+    await db.remove(userId, dbUser._rev!)
 
-    const creatorsToDelete = isCreator(dbUser) ? 1 : 0
+    const creatorsToDelete = (await isCreator(dbUser)) ? 1 : 0
     await UserDB.quotas.removeUsers(1, creatorsToDelete)
     await eventHelpers.handleDeleteEvents(dbUser)
     await cache.user.invalidateUser(userId)
     await sessions.invalidateSessions(userId, { reason: "deletion" })
+  }
+
+  static async createAdminUser(
+    email: string,
+    tenantId: string,
+    opts?: CreateAdminUserOpts
+  ) {
+    const password = opts?.password
+    const user: User = {
+      email: email,
+      password,
+      createdAt: Date.now(),
+      roles: {},
+      builder: {
+        global: true,
+      },
+      admin: {
+        global: true,
+      },
+      tenantId,
+      firstName: opts?.firstName,
+      lastName: opts?.lastName,
+    }
+    if (opts?.ssoId) {
+      user.ssoId = opts.ssoId
+    }
+    // always bust checklist beforehand, if an error occurs but can proceed, don't get
+    // stuck in a cycle
+    await cache.bustCache(cache.CacheKey.CHECKLIST)
+    return await UserDB.save(user, {
+      hashPassword: opts?.hashPassword,
+      requirePassword: opts?.requirePassword,
+      skipPasswordValidation: opts?.skipPasswordValidation,
+    })
   }
 
   static async getGroups(groupIds: string[]) {

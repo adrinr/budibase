@@ -1,12 +1,7 @@
 import { tenancy, configs } from "@budibase/backend-core"
-import { SettingsInnerConfig } from "@budibase/types"
-import {
-  InternalTemplateBinding,
-  LOGO_URL,
-  EmailTemplatePurpose,
-} from "../constants"
+import { EmailTemplatePurpose } from "@budibase/types"
+import { InternalTemplateBinding, LOGO_URL } from "../constants"
 import { checkSlashesInUrl } from "./index"
-import { getLicensedConfig } from "./configs"
 
 const BASE_COMPANY = "Budibase"
 import * as pro from "@budibase/pro"

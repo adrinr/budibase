@@ -3,12 +3,13 @@ import fs from "fs"
 import { join } from "path"
 import { TEMP_DIR, MINIO_DIR } from "./utils"
 import { progressBar } from "../utils"
+
 const {
   ObjectStoreBuckets,
   ObjectStore,
   retrieve,
   uploadDirectory,
-  makeSureBucketExists,
+  createBucketIfNotExists,
 } = objectStore
 
 const bucketList = Object.values(ObjectStoreBuckets)
@@ -60,7 +61,7 @@ export async function importObjects() {
   let count = 0
   for (let bucket of buckets) {
     const client = ObjectStore(bucket)
-    await makeSureBucketExists(client, bucket)
+    await createBucketIfNotExists(client, bucket)
     const files = await uploadDirectory(bucket, join(path, bucket), "/")
     count += files.length
     bar.update(count)

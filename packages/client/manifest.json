@@ -1,6 +1,7 @@
 {
   "features": {
     "spectrumThemes": true,
+    "unifiedTheme": true,
     "intelligentLoading": true,
     "deviceAwareness": true,
     "state": true,
@@ -10,7 +11,98 @@
     "rowSelection": true,
     "continueIfAction": true,
     "showNotificationAction": true,
-    "sidePanel": true
+    "sidePanel": true,
+    "modal": true,
+    "skeletonLoader": true
+  },
+  "typeSupportPresets": {
+    "numberLike": {
+      "supported": ["number", "boolean"],
+      "partialSupport": [
+        {
+          "type": "longform",
+          "message": "stringAsNumber"
+        },
+        {
+          "type": "string",
+          "message": "stringAsNumber"
+        },
+        {
+          "type": "bigint",
+          "message": "stringAsNumber"
+        },
+        {
+          "type": "options",
+          "message": "stringAsNumber"
+        },
+        {
+          "type": "formula",
+          "message": "stringAsNumber"
+        },
+        {
+          "type": "datetime",
+          "message": "dateAsNumber"
+        }
+      ],
+      "unsupported": [
+        {
+          "type": "json",
+          "message": "jsonPrimitivesOnly"
+        }
+      ]
+    },
+    "stringLike": {
+      "supported": [
+        "string",
+        "number",
+        "bigint",
+        "options",
+        "longform",
+        "boolean",
+        "datetime"
+      ],
+      "unsupported": [
+        {
+          "type": "json",
+          "message": "jsonPrimitivesOnly"
+        }
+      ]
+    },
+    "datetimeLike": {
+      "supported": ["datetime"],
+      "partialSupport": [
+        {
+          "type": "longform",
+          "message": "stringAsDate"
+        },
+        {
+          "type": "string",
+          "message": "stringAsDate"
+        },
+        {
+          "type": "options",
+          "message": "stringAsDate"
+        },
+        {
+          "type": "formula",
+          "message": "stringAsDate"
+        },
+        {
+          "type": "bigint",
+          "message": "stringAsDate"
+        },
+        {
+          "type": "number",
+          "message": "numberAsDate"
+        }
+      ],
+      "unsupported": [
+        {
+          "type": "json",
+          "message": "jsonPrimitivesOnly"
+        }
+      ]
+    }
   },
   "layout": {
     "name": "Layout",
@@ -74,11 +166,37 @@
     "icon": "Selection",
     "hasChildren": true,
     "size": {
-      "width": 400,
+      "width": 500,
       "height": 200
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "styles": ["padding", "size", "background", "border", "shadow"],
     "settings": [
+      {
+        "type": "select",
+        "label": "Layout",
+        "key": "layout",
+        "showInBar": true,
+        "barStyle": "buttons",
+        "options": [
+          {
+            "label": "Flex",
+            "value": "flex",
+            "barIcon": "ModernGridView",
+            "barTitle": "Flex layout"
+          },
+          {
+            "label": "Grid",
+            "value": "grid",
+            "barIcon": "ViewGrid",
+            "barTitle": "Grid layout"
+          }
+        ],
+        "defaultValue": "grid"
+      },
       {
         "type": "select",
         "label": "Direction",
@@ -89,17 +207,22 @@
           {
             "label": "Column",
             "value": "column",
-            "barIcon": "ViewColumn",
+            "barIcon": "TableSelectColumn",
             "barTitle": "Column layout"
           },
           {
             "label": "Row",
             "value": "row",
-            "barIcon": "ViewRow",
+            "barIcon": "TableSelectRow",
             "barTitle": "Row layout"
           }
         ],
-        "defaultValue": "column"
+        "defaultValue": "column",
+        "dependsOn": {
+          "setting": "layout",
+          "value": "grid",
+          "invert": true
+        }
       },
       {
         "type": "select",
@@ -133,7 +256,12 @@
             "barTitle": "Align stretched horizontally"
           }
         ],
-        "defaultValue": "stretch"
+        "defaultValue": "stretch",
+        "dependsOn": {
+          "setting": "layout",
+          "value": "grid",
+          "invert": true
+        }
       },
       {
         "type": "select",
@@ -167,7 +295,12 @@
             "barTitle": "Align stretched vertically"
           }
         ],
-        "defaultValue": "top"
+        "defaultValue": "top",
+        "dependsOn": {
+          "setting": "layout",
+          "value": "grid",
+          "invert": true
+        }
       },
       {
         "type": "select",
@@ -189,7 +322,12 @@
             "barTitle": "Grow container"
           }
         ],
-        "defaultValue": "shrink"
+        "defaultValue": "shrink",
+        "dependsOn": {
+          "setting": "layout",
+          "value": "grid",
+          "invert": true
+        }
       },
       {
         "type": "select",
@@ -215,7 +353,12 @@
             "value": "L"
           }
         ],
-        "defaultValue": "M"
+        "defaultValue": "M",
+        "dependsOn": {
+          "setting": "layout",
+          "value": "grid",
+          "invert": true
+        }
       },
       {
         "type": "boolean",
@@ -223,7 +366,12 @@
         "key": "wrap",
         "showInBar": true,
         "barIcon": "ModernGridView",
-        "barTitle": "Wrap"
+        "barTitle": "Wrap",
+        "dependsOn": {
+          "setting": "layout",
+          "value": "grid",
+          "invert": true
+        }
       },
       {
         "type": "event",
@@ -240,8 +388,12 @@
     "illegalChildren": ["section"],
     "showEmptyState": false,
     "size": {
-      "width": 400,
-      "height": 100
+      "width": 600,
+      "height": 200
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "settings": [
       {
@@ -262,6 +414,14 @@
     "name": "Button group",
     "icon": "Button",
     "hasChildren": false,
+    "size": {
+      "width": 200,
+      "height": 60
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
+    },
     "settings": [
       {
         "section": true,
@@ -270,6 +430,7 @@
           {
             "type": "buttonConfiguration",
             "key": "buttons",
+            "nested": true,
             "defaultValue": [
               {
                 "type": "cta",
@@ -288,6 +449,18 @@
         "name": "Layout",
         "settings": [
           {
+            "type": "boolean",
+            "label": "Collapse",
+            "key": "collapsed"
+          },
+          {
+            "type": "text",
+            "label": "Collapsed text",
+            "key": "collapsedText",
+            "dependsOn": "collapsed",
+            "placeholder": "Action"
+          },
+          {
             "type": "select",
             "label": "Direction",
             "key": "direction",
@@ -297,17 +470,21 @@
               {
                 "label": "Column",
                 "value": "column",
-                "barIcon": "ViewColumn",
+                "barIcon": "TableSelectColumn",
                 "barTitle": "Column layout"
               },
               {
                 "label": "Row",
                 "value": "row",
-                "barIcon": "ViewRow",
+                "barIcon": "TableSelectRow",
                 "barTitle": "Row layout"
               }
             ],
-            "defaultValue": "row"
+            "defaultValue": "row",
+            "dependsOn": {
+              "setting": "collapsed",
+              "invert": true
+            }
           },
           {
             "type": "select",
@@ -397,7 +574,11 @@
                 "barTitle": "Grow container"
               }
             ],
-            "defaultValue": "shrink"
+            "defaultValue": "shrink",
+            "dependsOn": {
+              "setting": "collapsed",
+              "invert": true
+            }
           },
           {
             "type": "select",
@@ -423,7 +604,11 @@
                 "value": "L"
               }
             ],
-            "defaultValue": "M"
+            "defaultValue": "M",
+            "dependsOn": {
+              "setting": "collapsed",
+              "invert": true
+            }
           },
           {
             "type": "boolean",
@@ -431,7 +616,11 @@
             "key": "wrap",
             "showInBar": true,
             "barIcon": "ModernGridView",
-            "barTitle": "Wrap"
+            "barTitle": "Wrap",
+            "dependsOn": {
+              "setting": "collapsed",
+              "invert": true
+            }
           }
         ]
       }
@@ -443,8 +632,12 @@
     "icon": "Button",
     "editable": true,
     "size": {
-      "width": 105,
+      "width": 120,
       "height": 32
+    },
+    "grid": {
+      "hAlign": "center",
+      "vAlign": "center"
     },
     "settings": [
       {
@@ -460,16 +653,16 @@
         "key": "type",
         "options": [
           {
+            "label": "Action",
+            "value": "cta"
+          },
+          {
             "label": "Primary",
             "value": "primary"
           },
           {
             "label": "Secondary",
             "value": "secondary"
-          },
-          {
-            "label": "Action",
-            "value": "cta"
           },
           {
             "label": "Warning",
@@ -480,7 +673,7 @@
             "value": "overBackground"
           }
         ],
-        "defaultValue": "primary"
+        "defaultValue": "cta"
       },
       {
         "type": "select",
@@ -523,6 +716,38 @@
         "barIcon": "NoEdit",
         "barTitle": "Disable button",
         "key": "disabled"
+      },
+      {
+        "type": "icon",
+        "label": "Icon",
+        "key": "icon"
+      },
+      {
+        "type": "select",
+        "label": "Gap",
+        "key": "gap",
+        "showInBar": true,
+        "barStyle": "picker",
+        "dependsOn": "icon",
+        "options": [
+          {
+            "label": "None",
+            "value": "N"
+          },
+          {
+            "label": "Small",
+            "value": "S"
+          },
+          {
+            "label": "Medium",
+            "value": "M"
+          },
+          {
+            "label": "Large",
+            "value": "L"
+          }
+        ],
+        "defaultValue": "M"
       },
       {
         "type": "event",
@@ -573,11 +798,14 @@
     "description": "A configurable data list that attaches to your backend tables.",
     "icon": "JourneyData",
     "illegalChildren": ["section"],
-    "requiredAncestors": ["dataprovider"],
     "hasChildren": true,
     "size": {
-      "width": 400,
-      "height": 100
+      "width": 500,
+      "height": 200
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "settings": [
       {
@@ -602,13 +830,13 @@
           {
             "label": "Column",
             "value": "column",
-            "barIcon": "ViewColumn",
+            "barIcon": "TableSelectColumn",
             "barTitle": "Column layout"
           },
           {
             "label": "Row",
             "value": "row",
-            "barIcon": "ViewRow",
+            "barIcon": "TableSelectRow",
             "barTitle": "Row layout"
           }
         ],
@@ -711,10 +939,12 @@
     ],
     "context": [
       {
-        "type": "schema"
+        "type": "schema",
+        "scope": "local"
       },
       {
         "type": "static",
+        "scope": "local",
         "values": [
           {
             "label": "Row index",
@@ -1069,6 +1299,10 @@
       "width": 100,
       "height": 25
     },
+    "grid": {
+      "hAlign": "center",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "text",
@@ -1101,6 +1335,12 @@
         "type": "color",
         "label": "Color",
         "key": "color",
+        "showInBar": true
+      },
+      {
+        "type": "color",
+        "label": "Text Color",
+        "key": "textColor",
         "showInBar": true
       },
       {
@@ -1140,6 +1380,7 @@
     "icon": "Images",
     "hasChildren": true,
     "styles": ["size"],
+    "showEmptyState": false,
     "size": {
       "width": 400,
       "height": 300
@@ -1204,6 +1445,10 @@
     "size": {
       "width": 25,
       "height": 25
+    },
+    "grid": {
+      "hAlign": "center",
+      "vAlign": "center"
     },
     "settings": [
       {
@@ -1518,6 +1763,10 @@
       "width": 260,
       "height": 143
     },
+    "grid": {
+      "hAlign": "center",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "text",
@@ -1551,6 +1800,10 @@
       "width": 400,
       "height": 100
     },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
+    },
     "settings": [
       {
         "type": "text",
@@ -1561,13 +1814,17 @@
     ]
   },
   "bar": {
+    "documentationLink": "https://docs.budibase.com/docs/bar-chart",
     "name": "Bar Chart",
     "description": "Bar chart",
     "icon": "GraphBarVertical",
-    "requiredAncestors": ["dataprovider"],
     "size": {
       "width": 600,
-      "height": 400
+      "height": 420
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "center"
     },
     "settings": [
       {
@@ -1586,6 +1843,11 @@
         "label": "Label column",
         "key": "labelColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "stringLike"
+          }
+        },
         "required": true
       },
       {
@@ -1593,6 +1855,11 @@
         "label": "Data columns",
         "key": "valueColumns",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -1720,14 +1987,18 @@
     ]
   },
   "line": {
+    "documentationLink": "https://docs.budibase.com/docs/line-chart",
     "name": "Line Chart",
     "description": "Line chart",
     "icon": "GraphTrend",
     "size": {
       "width": 600,
-      "height": 400
+      "height": 420
     },
-    "requiredAncestors": ["dataprovider"],
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "text",
@@ -1745,6 +2016,11 @@
         "label": "Label column",
         "key": "labelColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "stringLike"
+          }
+        },
         "required": true
       },
       {
@@ -1752,6 +2028,11 @@
         "label": "Data columns",
         "key": "valueColumns",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -1874,14 +2155,18 @@
     ]
   },
   "area": {
+    "documentationLink": "https://docs.budibase.com/docs/area-chart",
     "name": "Area Chart",
     "description": "Line chart",
     "icon": "GraphAreaStacked",
     "size": {
       "width": 600,
-      "height": 400
+      "height": 420
     },
-    "requiredAncestors": ["dataprovider"],
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "text",
@@ -1899,6 +2184,11 @@
         "label": "Label column",
         "key": "labelColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "stringLike"
+          }
+        },
         "required": true
       },
       {
@@ -1906,6 +2196,11 @@
         "label": "Data columns",
         "key": "valueColumns",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -2040,14 +2335,18 @@
     ]
   },
   "pie": {
+    "documentationLink": "https://docs.budibase.com/docs/pie-donut-chart",
     "name": "Pie Chart",
     "description": "Pie chart",
     "icon": "GraphPie",
     "size": {
       "width": 600,
-      "height": 400
+      "height": 420
     },
-    "requiredAncestors": ["dataprovider"],
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "text",
@@ -2065,13 +2364,23 @@
         "label": "Label column",
         "key": "labelColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "stringLike"
+          }
+        },
         "required": true
       },
       {
         "type": "field",
-        "label": "Data columns",
+        "label": "Data column",
         "key": "valueColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -2170,14 +2479,18 @@
     ]
   },
   "donut": {
+    "documentationLink": "https://docs.budibase.com/docs/pie-donut-chart",
     "name": "Donut Chart",
     "description": "Donut chart",
     "icon": "GraphDonut",
     "size": {
       "width": 600,
-      "height": 400
+      "height": 420
     },
-    "requiredAncestors": ["dataprovider"],
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "text",
@@ -2195,6 +2508,11 @@
         "label": "Label column",
         "key": "labelColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "stringLike"
+          }
+        },
         "required": true
       },
       {
@@ -2202,6 +2520,11 @@
         "label": "Data columns",
         "key": "valueColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -2300,14 +2623,18 @@
     ]
   },
   "candlestick": {
+    "documentationLink": "https://docs.budibase.com/docs/candlestick-chart",
     "name": "Candlestick Chart",
     "description": "Candlestick chart",
     "icon": "GraphBarVerticalStacked",
     "size": {
       "width": 600,
-      "height": 400
+      "height": 420
     },
-    "requiredAncestors": ["dataprovider"],
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "text",
@@ -2325,6 +2652,11 @@
         "label": "Date column",
         "key": "dateColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "datetimeLike"
+          }
+        },
         "required": true
       },
       {
@@ -2332,6 +2664,11 @@
         "label": "Open column",
         "key": "openColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -2339,6 +2676,11 @@
         "label": "Close column",
         "key": "closeColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -2346,6 +2688,11 @@
         "label": "High column",
         "key": "highColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -2353,6 +2700,11 @@
         "label": "Low column",
         "key": "lowColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -2392,14 +2744,18 @@
     ]
   },
   "histogram": {
+    "documentationLink": "https://docs.budibase.com/docs/histogram-chart",
     "name": "Histogram Chart",
     "description": "Histogram chart",
     "icon": "Histogram",
     "size": {
       "width": 600,
-      "height": 400
+      "height": 420
     },
-    "requiredAncestors": ["dataprovider"],
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "text",
@@ -2417,6 +2773,11 @@
         "label": "Data column",
         "key": "valueColumn",
         "dependsOn": "dataProvider",
+        "explanation": {
+          "typeSupport": {
+            "preset": "numberLike"
+          }
+        },
         "required": true
       },
       {
@@ -2544,10 +2905,14 @@
       "UpdateFieldValue",
       "ScrollTo"
     ],
-    "styles": ["size"],
+    "styles": ["padding", "size", "background", "border", "shadow"],
     "size": {
       "width": 400,
       "height": 400
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "settings": [
       {
@@ -2698,22 +3063,49 @@
       }
     ]
   },
+  "labelfield": {
+    "name": "Text Field",
+    "icon": "Text",
+    "editable": true,
+    "size": {
+      "width": 400,
+      "height": 60
+    },
+    "settings": [
+      {
+        "type": "plainText",
+        "label": "Label",
+        "key": "label"
+      },
+      {
+        "type": "number",
+        "label": "Initial width",
+        "key": "width",
+        "placeholder": "Auto",
+        "min": 80,
+        "max": 9999
+      },
+      {
+        "type": "tableConditions",
+        "label": "Conditions",
+        "key": "conditions"
+      }
+    ]
+  },
   "stringfield": {
     "name": "Text Field",
     "icon": "Text",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
-      "height": 32
+      "height": 60
     },
     "settings": [
       {
         "type": "field/string",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -2730,6 +3122,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -2827,24 +3224,32 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "string"
+        }
+      ]
+    }
   },
   "numberfield": {
     "name": "Number Field",
     "icon": "123",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
-      "height": 50
+      "height": 60
     },
     "settings": [
       {
         "type": "field/number",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -2861,6 +3266,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -2924,24 +3334,32 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "number"
+        }
+      ]
+    }
   },
   "bigintfield": {
     "name": "BigInt Field",
     "icon": "TagBold",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
-      "height": 50
+      "height": 60
     },
     "settings": [
       {
         "type": "field/bigint",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -2958,6 +3376,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -3005,24 +3428,32 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "number"
+        }
+      ]
+    }
   },
   "passwordfield": {
     "name": "Password Field",
     "icon": "LockClosed",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
-      "height": 50
+      "height": 60
     },
     "settings": [
       {
         "type": "field/string",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -3091,24 +3522,32 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "string"
+        }
+      ]
+    }
   },
   "optionsfield": {
     "name": "Options Picker",
     "icon": "Menu",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
-      "height": 50
+      "height": 60
     },
     "settings": [
       {
         "type": "field/options",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -3174,6 +3613,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "boolean",
@@ -3259,6 +3703,7 @@
       },
       {
         "type": "options",
+        "label": "Custom options",
         "key": "customOptions",
         "dependsOn": {
           "setting": "optionsSource",
@@ -3299,24 +3744,32 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "string"
+        }
+      ]
+    }
   },
   "multifieldselect": {
     "name": "Multi-select Picker",
     "icon": "ViewList",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
-      "height": 50
+      "height": 60
     },
     "settings": [
       {
         "type": "field/array",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -3334,6 +3787,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -3461,6 +3919,7 @@
       },
       {
         "type": "options",
+        "label": "Custom options",
         "key": "customOptions",
         "dependsOn": {
           "setting": "optionsSource",
@@ -3501,23 +3960,31 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "array"
+        }
+      ]
+    }
   },
   "booleanfield": {
     "name": "Checkbox",
     "icon": "SelectBox",
     "editable": true,
-    "requiredAncestors": ["form"],
     "size": {
-      "width": 20,
-      "height": 20
+      "width": 400,
+      "height": 60
     },
     "settings": [
       {
         "type": "field/boolean",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -3558,6 +4025,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -3621,24 +4093,32 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "boolean"
+        }
+      ]
+    }
   },
   "longformfield": {
     "name": "Long Form Field",
     "icon": "TextAlignLeft",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
-      "height": 150
+      "height": 100
     },
     "settings": [
       {
         "type": "field/longform",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -3656,6 +4136,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -3740,24 +4225,32 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "string"
+        }
+      ]
+    }
   },
   "datetimefield": {
     "name": "Date Picker",
     "icon": "Date",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
-      "height": 50
+      "height": 60
     },
     "settings": [
       {
         "type": "field/datetime",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -3783,12 +4276,6 @@
       },
       {
         "type": "boolean",
-        "label": "24-hour time",
-        "key": "time24hr",
-        "defaultValue": false
-      },
-      {
-        "type": "boolean",
         "label": "Ignore time zones",
         "key": "ignoreTimezones",
         "defaultValue": false
@@ -3798,6 +4285,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -3861,7 +4353,17 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "datetime"
+        }
+      ]
+    }
   },
   "codescanner": {
     "name": "Barcode/QR Scanner",
@@ -3869,14 +4371,13 @@
     "styles": ["size"],
     "size": {
       "width": 400,
-      "height": 50
+      "height": 60
     },
     "settings": [
       {
         "type": "field/barcodeqr",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -3895,6 +4396,11 @@
         "supportsConditions": false
       },
       {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
+      },
+      {
         "type": "boolean",
         "label": "Disabled",
         "key": "disabled",
@@ -3904,6 +4410,12 @@
         "type": "boolean",
         "label": "Manual entry",
         "key": "allowManualEntry",
+        "defaultValue": false
+      },
+      {
+        "type": "boolean",
+        "label": "Auto confirm",
+        "key": "autoConfirm",
         "defaultValue": false
       },
       {
@@ -3931,7 +4443,10 @@
             "label": "High",
             "value": 3136
           },
-          { "label": "Custom", "value": "custom" }
+          {
+            "label": "Custom",
+            "value": "custom"
+          }
         ]
       },
       {
@@ -4007,6 +4522,65 @@
           }
         ]
       }
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "signaturesinglefield": {
+    "name": "Signature",
+    "icon": "AnnotatePen",
+    "styles": ["size"],
+    "size": {
+      "width": 400,
+      "height": 60
+    },
+    "settings": [
+      {
+        "type": "field/signature_single",
+        "label": "Field",
+        "key": "field",
+        "required": true
+      },
+      {
+        "type": "text",
+        "label": "Label",
+        "key": "label"
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
+      },
+      {
+        "type": "boolean",
+        "label": "Disabled",
+        "key": "disabled",
+        "defaultValue": false
+      },
+      {
+        "type": "event",
+        "label": "On change",
+        "key": "onChange",
+        "context": [
+          {
+            "label": "Field Value",
+            "key": "value"
+          }
+        ]
+      },
+      {
+        "type": "validation/signature_single",
+        "label": "Validation",
+        "key": "validation"
+      }
     ]
   },
   "embeddedmap": {
@@ -4018,7 +4592,10 @@
       "width": 400,
       "height": 320
     },
-    "requiredAncestors": ["dataprovider"],
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
+    },
     "settings": [
       {
         "type": "dataProvider",
@@ -4123,8 +4700,8 @@
     ]
   },
   "attachmentfield": {
-    "name": "Attachment",
-    "icon": "Attach",
+    "name": "Attachment List",
+    "icon": "DocumentFragmentGroup",
     "styles": ["size"],
     "requiredAncestors": ["form"],
     "editable": true,
@@ -4143,6 +4720,11 @@
         "type": "text",
         "label": "Label",
         "key": "label"
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "text",
@@ -4214,6 +4796,97 @@
       }
     ]
   },
+  "attachmentsinglefield": {
+    "name": "Single Attachment",
+    "icon": "DocumentFragment",
+    "styles": ["size"],
+    "requiredAncestors": ["form"],
+    "editable": true,
+    "size": {
+      "width": 400,
+      "height": 200
+    },
+    "settings": [
+      {
+        "type": "field/attachment_single",
+        "label": "Field",
+        "key": "field",
+        "required": true
+      },
+      {
+        "type": "text",
+        "label": "Label",
+        "key": "label"
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
+      },
+      {
+        "type": "text",
+        "label": "Extensions",
+        "key": "extensions"
+      },
+      {
+        "type": "event",
+        "label": "On change",
+        "key": "onChange",
+        "context": [
+          {
+            "label": "Field Value",
+            "key": "value"
+          }
+        ]
+      },
+      {
+        "type": "boolean",
+        "label": "Compact",
+        "key": "compact",
+        "defaultValue": false
+      },
+      {
+        "type": "boolean",
+        "label": "Read only",
+        "key": "disabled",
+        "defaultValue": false
+      },
+      {
+        "type": "validation/attachment_single",
+        "label": "Validation",
+        "key": "validation"
+      },
+      {
+        "type": "select",
+        "label": "Layout",
+        "key": "span",
+        "defaultValue": 6,
+        "hidden": true,
+        "showInBar": true,
+        "barStyle": "buttons",
+        "options": [
+          {
+            "label": "1 column",
+            "value": 6,
+            "barIcon": "Stop",
+            "barTitle": "1 column"
+          },
+          {
+            "label": "2 columns",
+            "value": 3,
+            "barIcon": "ColumnTwoA",
+            "barTitle": "2 columns"
+          },
+          {
+            "label": "3 columns",
+            "value": 2,
+            "barIcon": "ViewColumn",
+            "barTitle": "3 columns"
+          }
+        ]
+      }
+    ]
+  },
   "relationshipfield": {
     "name": "Relationship Picker",
     "icon": "TaskList",
@@ -4222,7 +4895,7 @@
     "editable": true,
     "size": {
       "width": 400,
-      "height": 50
+      "height": 60
     },
     "settings": [
       {
@@ -4246,6 +4919,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -4327,7 +5005,6 @@
     "icon": "Brackets",
     "styles": ["size"],
     "editable": true,
-    "requiredAncestors": ["form"],
     "size": {
       "width": 400,
       "height": 100
@@ -4336,8 +5013,7 @@
       {
         "type": "field/json",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -4354,6 +5030,11 @@
         "label": "Default value",
         "key": "defaultValue",
         "supportsConditions": false
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -4412,7 +5093,17 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "string"
+        }
+      ]
+    }
   },
   "s3upload": {
     "name": "S3 File Upload",
@@ -4427,8 +5118,7 @@
       {
         "type": "field/s3",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -4473,7 +5163,17 @@
         "label": "Validation",
         "key": "validation"
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "array"
+        }
+      ]
+    }
   },
   "dataprovider": {
     "name": "Data Provider",
@@ -4482,8 +5182,12 @@
     "hasChildren": true,
     "actions": ["RefreshDatasource"],
     "size": {
-      "width": 400,
-      "height": 100
+      "width": 500,
+      "height": 200
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "settings": [
       {
@@ -4493,9 +5197,39 @@
         "required": true
       },
       {
+        "type": "select",
+        "label": "Auto-refresh",
+        "key": "autoRefresh",
+        "license": "premium",
+        "placeholder": "Never",
+        "options": [
+          {
+            "label": "10 seconds",
+            "value": 10
+          },
+          {
+            "label": "30 seconds",
+            "value": 30
+          },
+          {
+            "label": "1 minute",
+            "value": 60
+          },
+          {
+            "label": "5 minutes",
+            "value": 300
+          },
+          {
+            "label": "10 minutes",
+            "value": 600
+          }
+        ]
+      },
+      {
         "type": "filter",
         "label": "Filtering",
-        "key": "filter"
+        "key": "filter",
+        "resetOn": "dataSource"
       },
       {
         "type": "field/sortable",
@@ -4556,12 +5290,13 @@
     }
   },
   "table": {
+    "deprecated": true,
     "name": "Table",
     "icon": "Table",
     "illegalChildren": ["section"],
-    "requiredAncestors": ["dataprovider"],
     "hasChildren": true,
     "showEmptyState": false,
+    "actions": ["ClearRowSelection"],
     "size": {
       "width": 600,
       "height": 400
@@ -4642,15 +5377,27 @@
         ]
       }
     ],
-    "context": {
-      "type": "schema"
-    }
+    "context": [
+      {
+        "type": "schema",
+        "scope": "local"
+      },
+      {
+        "type": "static",
+        "values": [
+          {
+            "label": "Selected Rows",
+            "key": "selectedRows",
+            "type": "array"
+          }
+        ]
+      }
+    ]
   },
   "daterangepicker": {
     "name": "Date Range",
     "icon": "Calendar",
     "styles": ["size"],
-    "requiredAncestors": ["dataprovider"],
     "hasChildren": false,
     "size": {
       "width": 200,
@@ -4693,6 +5440,10 @@
     "size": {
       "width": 300,
       "height": 120
+    },
+    "grid": {
+      "hAlign": "center",
+      "vAlign": "center"
     },
     "settings": [
       {
@@ -4758,7 +5509,10 @@
       "width": 100,
       "height": 35
     },
-    "requiredAncestors": ["dataprovider"],
+    "grid": {
+      "hAlign": "center",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "dataProvider",
@@ -4800,10 +5554,19 @@
     ]
   },
   "chartblock": {
+    "documentationLink": "https://docs.budibase.com/docs/chart",
     "block": true,
-    "name": "Chart block",
+    "name": "Chart Block",
     "icon": "GraphPie",
     "hasChildren": false,
+    "size": {
+      "width": 600,
+      "height": 420
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "center"
+    },
     "settings": [
       {
         "type": "select",
@@ -4846,6 +5609,35 @@
         "label": "Data",
         "key": "dataSource",
         "required": true
+      },
+      {
+        "type": "select",
+        "label": "Auto-refresh",
+        "key": "autoRefresh",
+        "license": "premium",
+        "placeholder": "Never",
+        "options": [
+          {
+            "label": "10 seconds",
+            "value": 10
+          },
+          {
+            "label": "30 seconds",
+            "value": 30
+          },
+          {
+            "label": "1 minute",
+            "value": 60
+          },
+          {
+            "label": "5 minutes",
+            "value": 300
+          },
+          {
+            "label": "10 minutes",
+            "value": 600
+          }
+        ]
       },
       {
         "type": "text",
@@ -4983,6 +5775,11 @@
             "label": "Label column",
             "key": "labelColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "stringLike"
+              }
+            },
             "required": true
           },
           {
@@ -4990,6 +5787,11 @@
             "label": "Data column",
             "key": "valueColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           }
         ]
@@ -5008,6 +5810,11 @@
             "label": "Label column",
             "key": "labelColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "stringLike"
+              }
+            },
             "required": true
           },
           {
@@ -5015,6 +5822,11 @@
             "label": "Data column",
             "key": "valueColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           }
         ]
@@ -5033,6 +5845,11 @@
             "label": "Label column",
             "key": "labelColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "stringLike"
+              }
+            },
             "required": true
           },
           {
@@ -5040,6 +5857,11 @@
             "label": "Data columns",
             "key": "valueColumns",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           },
           {
@@ -5087,6 +5909,11 @@
             "label": "Value column",
             "key": "valueColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           },
           {
@@ -5128,6 +5955,11 @@
             "label": "Label column",
             "key": "labelColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "stringLike"
+              }
+            },
             "required": true
           },
           {
@@ -5135,6 +5967,11 @@
             "label": "Data columns",
             "key": "valueColumns",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           },
           {
@@ -5177,6 +6014,11 @@
             "label": "Label columns",
             "key": "labelColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "stringLike"
+              }
+            },
             "required": true
           },
           {
@@ -5184,6 +6026,11 @@
             "label": "Data columns",
             "key": "valueColumns",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           },
           {
@@ -5238,6 +6085,11 @@
             "label": "Date column",
             "key": "dateColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "datetimeLike"
+              }
+            },
             "required": true
           },
           {
@@ -5245,6 +6097,11 @@
             "label": "Open column",
             "key": "openColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           },
           {
@@ -5252,6 +6109,11 @@
             "label": "Close column",
             "key": "closeColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           },
           {
@@ -5259,6 +6121,11 @@
             "label": "High column",
             "key": "highColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           },
           {
@@ -5266,6 +6133,11 @@
             "label": "Low column",
             "key": "lowColumn",
             "dependsOn": "dataSource",
+            "explanation": {
+              "typeSupport": {
+                "preset": "numberLike"
+              }
+            },
             "required": true
           },
           {
@@ -5290,8 +6162,9 @@
     ]
   },
   "tableblock": {
+    "deprecated": true,
     "block": true,
-    "name": "Table block",
+    "name": "Table Block",
     "icon": "Table",
     "styles": ["size"],
     "size": {
@@ -5313,6 +6186,35 @@
             "label": "Data",
             "key": "dataSource",
             "required": true
+          },
+          {
+            "type": "select",
+            "label": "Auto-refresh",
+            "key": "autoRefresh",
+            "license": "premium",
+            "placeholder": "Never",
+            "options": [
+              {
+                "label": "10 seconds",
+                "value": 10
+              },
+              {
+                "label": "30 seconds",
+                "value": 30
+              },
+              {
+                "label": "1 minute",
+                "value": 60
+              },
+              {
+                "label": "5 minutes",
+                "value": 300
+              },
+              {
+                "label": "10 minutes",
+                "value": 600
+              }
+            ]
           },
           {
             "type": "columns",
@@ -5533,16 +6435,64 @@
           }
         ]
       }
+    ],
+    "context": [
+      {
+        "type": "static",
+        "suffix": "provider",
+        "values": [
+          {
+            "label": "Rows",
+            "key": "rows",
+            "type": "array"
+          },
+          {
+            "label": "Extra Info",
+            "key": "info",
+            "type": "string"
+          },
+          {
+            "label": "Rows Length",
+            "key": "rowsLength",
+            "type": "number"
+          },
+          {
+            "label": "Schema",
+            "key": "schema",
+            "type": "object"
+          },
+          {
+            "label": "Page Number",
+            "key": "pageNumber",
+            "type": "number"
+          }
+        ]
+      },
+      {
+        "type": "static",
+        "suffix": "table",
+        "values": [
+          {
+            "label": "Selected Rows",
+            "key": "selectedRows",
+            "type": "array"
+          }
+        ]
+      }
     ]
   },
   "cardsblock": {
     "block": true,
-    "name": "Cards block",
+    "name": "Cards Block",
     "icon": "PersonalizationField",
     "styles": ["size"],
     "size": {
       "width": 600,
       "height": 400
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "settings": [
       {
@@ -5555,6 +6505,35 @@
         "label": "Data",
         "key": "dataSource",
         "required": true
+      },
+      {
+        "type": "select",
+        "label": "Auto-refresh",
+        "key": "autoRefresh",
+        "license": "premium",
+        "placeholder": "Never",
+        "options": [
+          {
+            "label": "10 seconds",
+            "value": 10
+          },
+          {
+            "label": "30 seconds",
+            "value": 30
+          },
+          {
+            "label": "1 minute",
+            "value": 60
+          },
+          {
+            "label": "5 minutes",
+            "value": 300
+          },
+          {
+            "label": "10 minutes",
+            "value": 600
+          }
+        ]
       },
       {
         "type": "searchfield",
@@ -5608,27 +6587,28 @@
             "key": "cardTitle",
             "label": "Title",
             "nested": true,
-            "defaultValue": "Title"
+            "resetOn": "dataSource"
           },
           {
             "type": "text",
             "key": "cardSubtitle",
             "label": "Subtitle",
             "nested": true,
-            "defaultValue": "Subtitle"
+            "resetOn": "dataSource"
           },
           {
             "type": "text",
             "key": "cardDescription",
             "label": "Description",
             "nested": true,
-            "defaultValue": "Description"
+            "resetOn": "dataSource"
           },
           {
             "type": "text",
             "key": "cardImageURL",
             "label": "Image URL",
-            "nested": true
+            "nested": true,
+            "resetOn": "dataSource"
           },
           {
             "type": "boolean",
@@ -5712,18 +6692,23 @@
     ],
     "context": {
       "type": "schema",
-      "suffix": "repeater"
+      "suffix": "repeater",
+      "scope": "local"
     }
   },
   "repeaterblock": {
     "block": true,
-    "name": "Repeater block",
+    "name": "Repeater Block",
     "icon": "ViewList",
-    "illegalChildren": ["section"],
+    "illegalChildren": ["section", "rowexplorer"],
     "hasChildren": true,
     "size": {
-      "width": 400,
-      "height": 100
+      "width": 500,
+      "height": 200
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "settings": [
       {
@@ -5731,6 +6716,35 @@
         "label": "Data",
         "key": "dataSource",
         "required": true
+      },
+      {
+        "type": "select",
+        "label": "Auto-refresh",
+        "key": "autoRefresh",
+        "license": "premium",
+        "placeholder": "Never",
+        "options": [
+          {
+            "label": "10 seconds",
+            "value": 10
+          },
+          {
+            "label": "30 seconds",
+            "value": 30
+          },
+          {
+            "label": "1 minute",
+            "value": 60
+          },
+          {
+            "label": "5 minutes",
+            "value": 300
+          },
+          {
+            "label": "10 minutes",
+            "value": 600
+          }
+        ]
       },
       {
         "type": "filter",
@@ -5782,13 +6796,13 @@
               {
                 "label": "Column",
                 "value": "column",
-                "barIcon": "ViewRow",
+                "barIcon": "TableSelectColumn",
                 "barTitle": "Column layout"
               },
               {
                 "label": "Row",
                 "value": "row",
-                "barIcon": "ViewColumn",
+                "barIcon": "TableSelectRow",
                 "barTitle": "Row layout"
               }
             ],
@@ -5936,7 +6950,8 @@
       },
       {
         "type": "schema",
-        "suffix": "repeater"
+        "suffix": "repeater",
+        "scope": "local"
       }
     ]
   },
@@ -5948,6 +6963,10 @@
       "width": 400,
       "height": 100
     },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "start"
+    },
     "settings": [
       {
         "type": "text",
@@ -5957,16 +6976,21 @@
       }
     ]
   },
-  "formblock": {
-    "name": "Form Block",
-    "icon": "Form",
-    "styles": ["size"],
+  "multistepformblock": {
+    "name": "Multi-step Form Block",
+    "icon": "AssetsAdded",
     "block": true,
-    "info": "Form blocks are only compatible with internal or SQL tables",
+    "hasChildren": false,
+    "ejectable": false,
     "size": {
-      "width": 400,
+      "width": 600,
       "height": 400
     },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "start"
+    },
+    "styles": ["padding", "size", "background", "border", "shadow"],
     "settings": [
       {
         "type": "table",
@@ -5981,25 +7005,13 @@
         "defaultValue": "Create"
       },
       {
-        "type": "text",
-        "label": "Title",
-        "key": "title",
-        "nested": true
-      },
-      {
-        "type": "text",
-        "label": "Description",
-        "key": "description",
-        "nested": true
-      },
-      {
         "section": true,
         "dependsOn": {
           "setting": "actionType",
           "value": "Create",
           "invert": true
         },
-        "name": "Row details",
+        "name": "Row ID",
         "info": "<a href='https://docs.budibase.com/docs/form-block' target='_blank'>How to pass a row ID using bindings</a>",
         "settings": [
           {
@@ -6019,8 +7031,230 @@
       },
       {
         "section": true,
-        "name": "Fields",
+        "name": "Details",
         "settings": [
+          {
+            "type": "stepConfiguration",
+            "key": "steps",
+            "nested": true,
+            "labelHidden": true,
+            "resetOn": ["dataSource", "actionType"],
+            "defaultValue": [{}]
+          }
+        ]
+      },
+      {
+        "tag": "style",
+        "type": "select",
+        "label": "Button position",
+        "key": "buttonPosition",
+        "options": [
+          {
+            "label": "Bottom",
+            "value": "bottom"
+          },
+          {
+            "label": "Top",
+            "value": "top"
+          }
+        ],
+        "defaultValue": "bottom"
+      },
+      {
+        "tag": "style",
+        "type": "select",
+        "label": "Size",
+        "key": "size",
+        "options": [
+          {
+            "label": "Medium",
+            "value": "spectrum--medium"
+          },
+          {
+            "label": "Large",
+            "value": "spectrum--large"
+          }
+        ],
+        "defaultValue": "spectrum--medium"
+      }
+    ],
+    "actions": [
+      {
+        "type": "ValidateForm",
+        "suffix": "form"
+      },
+      {
+        "type": "ClearForm",
+        "suffix": "form"
+      },
+      {
+        "type": "UpdateFieldValue",
+        "suffix": "form"
+      },
+      {
+        "type": "ScrollTo",
+        "suffix": "form"
+      },
+      {
+        "type": "ChangeFormStep",
+        "suffix": "form"
+      },
+      {
+        "type": "RefreshDatasource",
+        "suffix": "provider"
+      }
+    ],
+    "context": [
+      {
+        "type": "form",
+        "suffix": "form"
+      },
+      {
+        "type": "schema",
+        "suffix": "repeater"
+      },
+      {
+        "type": "static",
+        "suffix": "form",
+        "values": [
+          {
+            "label": "Value",
+            "key": "__value",
+            "type": "object"
+          },
+          {
+            "label": "Valid",
+            "key": "__valid",
+            "type": "boolean"
+          },
+          {
+            "label": "Current Step",
+            "key": "__currentStep",
+            "type": "number"
+          },
+          {
+            "label": "Current Step Valid",
+            "key": "__currentStepValid",
+            "type": "boolean"
+          }
+        ]
+      }
+    ]
+  },
+  "multistepformblockstep": {
+    "name": "Multi-step Form Block Step",
+    "settings": [
+      {
+        "type": "formStepControls",
+        "label": "Steps",
+        "key": "steps"
+      },
+      {
+        "type": "text",
+        "label": "Title",
+        "key": "title",
+        "nested": true
+      },
+      {
+        "type": "text",
+        "label": "Description",
+        "key": "desc",
+        "nested": true
+      },
+      {
+        "type": "fieldConfiguration",
+        "key": "fields",
+        "nested": true
+      },
+      {
+        "type": "buttonConfiguration",
+        "label": "Buttons",
+        "key": "buttons",
+        "wide": true,
+        "nested": true
+      },
+      {
+        "type": "boolean",
+        "label": "Collapse",
+        "key": "buttonsCollapsed"
+      },
+      {
+        "type": "text",
+        "label": "Collapsed text",
+        "key": "buttonsCollapsedText",
+        "dependsOn": "buttonsCollapsed",
+        "placeholder": "Action"
+      }
+    ]
+  },
+  "formblock": {
+    "name": "Form Block",
+    "icon": "Form",
+    "styles": ["padding", "size", "background", "border", "shadow"],
+    "block": true,
+    "info": "Form blocks are only compatible with internal or SQL tables",
+    "size": {
+      "width": 600,
+      "height": 400
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "start"
+    },
+    "settings": [
+      {
+        "type": "table",
+        "label": "Data",
+        "key": "dataSource"
+      },
+      {
+        "type": "radio",
+        "label": "Type",
+        "key": "actionType",
+        "options": ["Create", "Update", "View"],
+        "defaultValue": "Create"
+      },
+      {
+        "section": true,
+        "dependsOn": {
+          "setting": "actionType",
+          "value": "Create",
+          "invert": true
+        },
+        "name": "Row ID",
+        "info": "<a href='https://docs.budibase.com/docs/form-block' target='_blank'>How to pass a row ID using bindings</a>",
+        "settings": [
+          {
+            "type": "text",
+            "label": "Row ID",
+            "key": "rowId",
+            "nested": true
+          },
+          {
+            "type": "text",
+            "label": "No rows found",
+            "key": "noRowsMessage",
+            "defaultValue": "We couldn't find a row to display",
+            "nested": true
+          }
+        ]
+      },
+      {
+        "section": true,
+        "name": "Details",
+        "settings": [
+          {
+            "type": "text",
+            "label": "Title",
+            "key": "title",
+            "nested": true
+          },
+          {
+            "type": "text",
+            "label": "Description",
+            "key": "description",
+            "nested": true
+          },
           {
             "type": "fieldConfiguration",
             "key": "fields",
@@ -6037,53 +7271,43 @@
         ]
       },
       {
+        "tag": "style",
+        "type": "select",
+        "label": "Button position",
+        "key": "buttonPosition",
+        "options": [
+          {
+            "label": "Bottom",
+            "value": "bottom"
+          },
+          {
+            "label": "Top",
+            "value": "top"
+          }
+        ],
+        "defaultValue": "bottom"
+      },
+      {
         "section": true,
         "name": "Buttons",
-        "dependsOn": {
-          "setting": "actionType",
-          "value": "View",
-          "invert": true
-        },
         "settings": [
           {
-            "type": "text",
-            "key": "saveButtonLabel",
-            "label": "Save button",
+            "type": "buttonConfiguration",
+            "key": "buttons",
             "nested": true,
-            "defaultValue": "Save"
-          },
-          {
-            "type": "text",
-            "key": "deleteButtonLabel",
-            "label": "Delete button",
-            "nested": true,
-            "defaultValue": "Delete",
-            "dependsOn": {
-              "setting": "actionType",
-              "value": "Update"
-            }
-          },
-          {
-            "type": "url",
-            "label": "Navigate after button press",
-            "key": "actionUrl",
-            "placeholder": "Choose a screen",
-            "dependsOn": {
-              "setting": "actionType",
-              "value": "View",
-              "invert": true
-            }
+            "resetOn": ["actionType", "dataSource"]
           },
           {
             "type": "boolean",
-            "label": "Hide notifications",
-            "key": "notificationOverride",
-            "defaultValue": false,
-            "dependsOn": {
-              "setting": "actionType",
-              "value": "View",
-              "invert": true
-            }
+            "label": "Collapse",
+            "key": "buttonsCollapsed"
+          },
+          {
+            "type": "text",
+            "label": "Collapsed text",
+            "key": "buttonsCollapsedText",
+            "dependsOn": "buttonsCollapsed",
+            "placeholder": "Action"
           }
         ]
       },
@@ -6105,6 +7329,28 @@
         "defaultValue": "spectrum--medium"
       }
     ],
+    "actions": [
+      {
+        "type": "ValidateForm",
+        "suffix": "form"
+      },
+      {
+        "type": "ClearForm",
+        "suffix": "form"
+      },
+      {
+        "type": "UpdateFieldValue",
+        "suffix": "form"
+      },
+      {
+        "type": "ScrollTo",
+        "suffix": "form"
+      },
+      {
+        "type": "RefreshDatasource",
+        "suffix": "provider"
+      }
+    ],
     "context": [
       {
         "type": "form",
@@ -6120,18 +7366,83 @@
     "name": "Side Panel",
     "icon": "RailRight",
     "hasChildren": true,
-    "illegalChildren": ["section", "sidepanel"],
+    "ignoresLayout": true,
+    "illegalChildren": ["section", "sidepanel", "modal"],
     "showEmptyState": false,
     "draggable": false,
-    "info": "Side panels are hidden by default. They will only be revealed when triggered by the 'Open Side Panel' action."
+    "info": "Side panels are hidden by default. They will only be revealed when triggered by the 'Open Side Panel' action.",
+    "settings": [
+      {
+        "type": "boolean",
+        "key": "ignoreClicksOutside",
+        "label": "Ignore clicks outside",
+        "defaultValue": false
+      },
+      {
+        "type": "event",
+        "key": "onClose",
+        "label": "On close"
+      }
+    ]
+  },
+  "modal": {
+    "name": "Modal",
+    "icon": "MBox",
+    "hasChildren": true,
+    "illegalChildren": ["section", "modal", "sidepanel"],
+    "ignoresLayout": true,
+    "showEmptyState": false,
+    "draggable": false,
+    "info": "Modals are hidden by default. They will only be revealed when triggered by the 'Open Modal' action.",
+    "settings": [
+      {
+        "type": "boolean",
+        "key": "ignoreClicksOutside",
+        "label": "Ignore clicks outside",
+        "defaultValue": false
+      },
+      {
+        "type": "event",
+        "key": "onClose",
+        "label": "On close"
+      },
+      {
+        "type": "select",
+        "label": "Size",
+        "key": "size",
+        "defaultValue": "small",
+        "options": [
+          {
+            "label": "Small",
+            "value": "small"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "Large",
+            "value": "large"
+          },
+          {
+            "label": "Fullscreen",
+            "value": "fullscreen"
+          }
+        ]
+      }
+    ]
   },
   "rowexplorer": {
     "block": true,
     "name": "Row Explorer Block",
     "icon": "PersonalizationField",
     "size": {
-      "width": 600,
-      "height": 400
+      "width": 800,
+      "height": 426
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "settings": [
       {
@@ -6139,6 +7450,35 @@
         "label": "Data",
         "key": "dataSource",
         "required": true
+      },
+      {
+        "type": "select",
+        "label": "Auto-refresh",
+        "key": "autoRefresh",
+        "license": "premium",
+        "placeholder": "Never",
+        "options": [
+          {
+            "label": "10 seconds",
+            "value": 10
+          },
+          {
+            "label": "30 seconds",
+            "value": 30
+          },
+          {
+            "label": "1 minute",
+            "value": 60
+          },
+          {
+            "label": "5 minutes",
+            "value": 300
+          },
+          {
+            "label": "10 minutes",
+            "value": 600
+          }
+        ]
       },
       {
         "type": "text",
@@ -6212,16 +7552,21 @@
     ],
     "context": {
       "type": "schema",
-      "suffix": "repeater"
+      "suffix": "repeater",
+      "scope": "local"
     }
   },
   "gridblock": {
-    "name": "Grid block",
+    "name": "Table",
     "icon": "Table",
     "styles": ["size"],
     "size": {
       "width": 600,
       "height": 400
+    },
+    "grid": {
+      "hAlign": "stretch",
+      "vAlign": "stretch"
     },
     "settings": [
       {
@@ -6229,19 +7574,6 @@
         "label": "Data",
         "key": "table",
         "required": true
-      },
-      {
-        "type": "columns/grid",
-        "label": "Columns",
-        "key": "columns",
-        "dependsOn": [
-          "table",
-          {
-            "setting": "table.type",
-            "value": "custom",
-            "invert": true
-          }
-        ]
       },
       {
         "type": "filter",
@@ -6340,6 +7672,23 @@
         "defaultValue": false
       },
       {
+        "type": "boolean",
+        "label": "Quiet",
+        "key": "quiet",
+        "defaultValue": false
+      },
+      {
+        "section": true,
+        "name": "Columns",
+        "settings": [
+          {
+            "type": "columns/grid",
+            "key": "columns",
+            "resetOn": "table"
+          }
+        ]
+      },
+      {
         "section": true,
         "name": "Buttons",
         "settings": [
@@ -6347,27 +7696,51 @@
             "type": "buttonConfiguration",
             "key": "buttons",
             "nested": true,
-            "max": 3,
             "context": [
               {
                 "label": "Clicked row",
                 "key": "row"
               }
             ]
+          },
+          {
+            "type": "boolean",
+            "label": "Collapse",
+            "key": "buttonsCollapsed"
+          },
+          {
+            "type": "text",
+            "label": "Collapsed text",
+            "key": "buttonsCollapsedText",
+            "dependsOn": "buttonsCollapsed",
+            "placeholder": "Action"
           }
         ]
       }
     ],
-    "context": {
-      "type": "schema"
-    }
+    "context": [
+      {
+        "type": "schema",
+        "scope": "local"
+      },
+      {
+        "type": "static",
+        "values": [
+          {
+            "label": "Selected rows",
+            "key": "selectedRows",
+            "type": "array"
+          }
+        ]
+      }
+    ],
+    "actions": ["RefreshDatasource"]
   },
   "bbreferencefield": {
     "devComment": "As bb reference is only used for user subtype for now, we are using user for icon and labels",
-    "name": "User Field",
-    "icon": "User",
+    "name": "User List Field",
+    "icon": "UserGroup",
     "styles": ["size"],
-    "requiredAncestors": ["form"],
     "editable": true,
     "size": {
       "width": 400,
@@ -6377,8 +7750,7 @@
       {
         "type": "field/bb_reference",
         "label": "Field",
-        "key": "field",
-        "required": true
+        "key": "field"
       },
       {
         "type": "text",
@@ -6394,6 +7766,11 @@
         "type": "text",
         "label": "Default value",
         "key": "defaultValue"
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
       },
       {
         "type": "event",
@@ -6424,6 +7801,17 @@
         "defaultValue": false
       },
       {
+        "type": "boolean",
+        "label": "Read only",
+        "key": "readonly",
+        "defaultValue": false,
+        "dependsOn": {
+          "setting": "disabled",
+          "value": true,
+          "invert": true
+        }
+      },
+      {
         "type": "select",
         "label": "Layout",
         "key": "span",
@@ -6452,6 +7840,132 @@
           }
         ]
       }
-    ]
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "array"
+        }
+      ]
+    }
+  },
+  "bbreferencesinglefield": {
+    "devComment": "As bb reference is only used for user subtype for now, we are using user for icon and labels",
+    "name": "User Field",
+    "icon": "User",
+    "styles": ["size"],
+    "editable": true,
+    "size": {
+      "width": 400,
+      "height": 50
+    },
+    "settings": [
+      {
+        "type": "field/bb_reference_single",
+        "label": "Field",
+        "key": "field"
+      },
+      {
+        "type": "text",
+        "label": "Label",
+        "key": "label"
+      },
+      {
+        "type": "text",
+        "label": "Placeholder",
+        "key": "placeholder"
+      },
+      {
+        "type": "text",
+        "label": "Default value",
+        "key": "defaultValue"
+      },
+      {
+        "type": "text",
+        "label": "Help text",
+        "key": "helpText"
+      },
+      {
+        "type": "event",
+        "label": "On change",
+        "key": "onChange",
+        "context": [
+          {
+            "label": "Field Value",
+            "key": "value"
+          }
+        ]
+      },
+      {
+        "type": "validation/link",
+        "label": "Validation",
+        "key": "validation"
+      },
+      {
+        "type": "boolean",
+        "label": "Search",
+        "key": "autocomplete",
+        "defaultValue": true
+      },
+      {
+        "type": "boolean",
+        "label": "Disabled",
+        "key": "disabled",
+        "defaultValue": false
+      },
+      {
+        "type": "boolean",
+        "label": "Read only",
+        "key": "readonly",
+        "defaultValue": false,
+        "dependsOn": {
+          "setting": "disabled",
+          "value": true,
+          "invert": true
+        }
+      },
+      {
+        "type": "select",
+        "label": "Layout",
+        "key": "span",
+        "defaultValue": 6,
+        "hidden": true,
+        "showInBar": true,
+        "barStyle": "buttons",
+        "options": [
+          {
+            "label": "1 column",
+            "value": 6,
+            "barIcon": "Stop",
+            "barTitle": "1 column"
+          },
+          {
+            "label": "2 columns",
+            "value": 3,
+            "barIcon": "ColumnTwoA",
+            "barTitle": "2 columns"
+          },
+          {
+            "label": "3 columns",
+            "value": 2,
+            "barIcon": "ViewColumn",
+            "barTitle": "3 columns"
+          }
+        ]
+      }
+    ],
+    "context": {
+      "type": "static",
+      "values": [
+        {
+          "label": "Value",
+          "key": "value",
+          "type": "string"
+        }
+      ]
+    }
   }
 }

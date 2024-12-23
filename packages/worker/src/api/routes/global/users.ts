@@ -4,17 +4,19 @@ import { auth } from "@budibase/backend-core"
 import Joi from "joi"
 import cloudRestricted from "../../../middleware/cloudRestricted"
 import { users } from "../validation"
-import * as selfController from "../../controllers/global/self"
 
 const router: Router = new Router()
+const OPTIONAL_STRING = Joi.string().optional().allow(null).allow("")
 
 function buildAdminInitValidation() {
   return auth.joiValidator.body(
     Joi.object({
       email: Joi.string().required(),
-      password: Joi.string(),
+      password: OPTIONAL_STRING,
       tenantId: Joi.string().required(),
       ssoId: Joi.string(),
+      familyName: OPTIONAL_STRING,
+      givenName: OPTIONAL_STRING,
     })
       .required()
       .unknown(false)
@@ -65,6 +67,12 @@ router
     controller.save
   )
   .post(
+    "/api/global/users/sso",
+    cloudRestricted,
+    users.buildAddSsoSupport(),
+    controller.addSsoSupport
+  )
+  .post(
     "/api/global/users/bulk",
     auth.adminOnly,
     users.buildUserBulkUserValidation(),
@@ -99,6 +107,11 @@ router
     buildInviteMultipleValidation(),
     controller.inviteMultiple
   )
+  .post(
+    "/api/global/users/multi/invite/delete",
+    auth.builderOrAdmin,
+    controller.removeMultipleInvites
+  )
 
   // non-global endpoints
   .get("/api/global/users/invite/:code", controller.checkInvite)
@@ -123,15 +136,9 @@ router
     buildAdminInitValidation(),
     controller.adminUser
   )
+  .get("/api/global/users/accountholder", controller.accountHolderLookup)
   .get("/api/global/users/tenant/:id", controller.tenantUserLookup)
   // global endpoint but needs to come at end (blocks other endpoints otherwise)
   .get("/api/global/users/:id", auth.builderOrAdmin, controller.find)
-  // DEPRECATED - use new versions with self API
-  .get("/api/global/users/self", selfController.getSelf)
-  .post(
-    "/api/global/users/self",
-    users.buildUserSaveValidation(),
-    selfController.updateSelf
-  )
 
 export default router

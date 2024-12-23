@@ -1,11 +1,18 @@
 import env from "../environment"
-import { EmailTemplatePurpose, TemplateType } from "../constants"
+import { TemplateType } from "../constants"
 import { getTemplateByPurpose, EmailTemplates } from "../constants/templates"
 import { getSettingsTemplateContext } from "./templates"
 import { processString } from "@budibase/string-templates"
-import { User, SendEmailOpts, SMTPInnerConfig } from "@budibase/types"
-import { configs, cache } from "@budibase/backend-core"
+import {
+  User,
+  SendEmailOpts,
+  SMTPInnerConfig,
+  EmailTemplatePurpose,
+} from "@budibase/types"
+import { configs, cache, objectStore } from "@budibase/backend-core"
 import ical from "ical-generator"
+import _ from "lodash"
+
 const nodemailer = require("nodemailer")
 
 const TEST_MODE = env.ENABLE_EMAIL_TEST_MODE && env.isDev()
@@ -160,6 +167,15 @@ export async function sendEmail(
       user: opts?.user,
       contents: opts?.contents,
     }),
+  }
+  if (opts?.attachments) {
+    let attachments = await Promise.all(
+      opts.attachments?.map(objectStore.processAutomationAttachment)
+    )
+    attachments = attachments.map(attachment => {
+      return _.omit(attachment, "path")
+    })
+    message = { ...message, attachments }
   }
 
   message = {

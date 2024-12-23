@@ -1,133 +1,27 @@
 <script>
   import BlockComponent from "components/BlockComponent.svelte"
   import Placeholder from "components/app/Placeholder.svelte"
-  import { makePropSafe as safe } from "@budibase/string-templates"
   import { getContext } from "svelte"
+  import FormBlockComponent from "../FormBlockComponent.svelte"
 
   export let dataSource
-  export let actionUrl
   export let actionType
   export let size
   export let disabled
   export let fields
   export let title
   export let description
-  export let saveButtonLabel
-  export let deleteButtonLabel
+  export let buttons
+  export let buttonPosition = "bottom"
+  export let buttonsCollapsed
+  export let buttonsCollapsedText
   export let schema
-  export let repeaterId
-  export let notificationOverride
 
-  const FieldTypeToComponentMap = {
-    string: "stringfield",
-    number: "numberfield",
-    bigint: "bigintfield",
-    options: "optionsfield",
-    array: "multifieldselect",
-    boolean: "booleanfield",
-    longform: "longformfield",
-    datetime: "datetimefield",
-    attachment: "attachmentfield",
-    link: "relationshipfield",
-    json: "jsonfield",
-    barcodeqr: "codescanner",
-    bb_reference: "bbreferencefield",
-  }
   const context = getContext("context")
 
   let formId
 
-  $: onSave = [
-    {
-      "##eventHandlerType": "Validate Form",
-      parameters: {
-        componentId: formId,
-      },
-    },
-    {
-      "##eventHandlerType": "Save Row",
-      parameters: {
-        providerId: formId,
-        tableId: dataSource?.resourceId,
-        notificationOverride,
-      },
-    },
-    {
-      "##eventHandlerType": "Close Screen Modal",
-    },
-    {
-      "##eventHandlerType": "Close Side Panel",
-    },
-    // Clear a create form once submitted
-    ...(actionType !== "Create"
-      ? []
-      : [
-          {
-            "##eventHandlerType": "Clear Form",
-            parameters: {
-              componentId: formId,
-            },
-          },
-        ]),
-    {
-      "##eventHandlerType": "Navigate To",
-      parameters: {
-        url: actionUrl,
-      },
-    },
-  ]
-  $: onDelete = [
-    {
-      "##eventHandlerType": "Delete Row",
-      parameters: {
-        confirm: true,
-        tableId: dataSource?.resourceId,
-        rowId: `{{ ${safe(repeaterId)}.${safe("_id")} }}`,
-        revId: `{{ ${safe(repeaterId)}.${safe("_rev")} }}`,
-        notificationOverride,
-      },
-    },
-    {
-      "##eventHandlerType": "Close Screen Modal",
-    },
-    {
-      "##eventHandlerType": "Close Side Panel",
-    },
-    {
-      "##eventHandlerType": "Navigate To",
-      parameters: {
-        url: actionUrl,
-      },
-    },
-  ]
-
-  $: renderDeleteButton = deleteButtonLabel && actionType === "Update"
-  $: renderSaveButton = saveButtonLabel && actionType !== "View"
-  $: renderButtons = renderDeleteButton || renderSaveButton
-  $: renderHeader = renderButtons || title
-
-  const getComponentForField = field => {
-    const fieldSchemaName = field.field || field.name
-    if (!fieldSchemaName || !schema?.[fieldSchemaName]) {
-      return null
-    }
-    const type = schema[fieldSchemaName].type
-    return FieldTypeToComponentMap[type]
-  }
-
-  const getPropsForField = field => {
-    let fieldProps = field._component
-      ? {
-          ...field,
-        }
-      : {
-          field: field.name,
-          label: field.name,
-          placeholder: field.name,
-          _instanceName: field.name,
-        }
-    return fieldProps
-  }
+  $: renderHeader = buttons || title
 </script>
 
 {#if fields?.length}
@@ -184,42 +78,16 @@
               props={{ text: title || "" }}
               order={0}
             />
-            {#if renderButtons}
+            {#if buttonPosition == "top"}
               <BlockComponent
-                type="container"
+                type="buttongroup"
                 props={{
-                  direction: "row",
-                  hAlign: "stretch",
-                  vAlign: "center",
-                  gap: "M",
-                  wrap: true,
+                  buttons,
+                  collapsed: buttonsCollapsed,
+                  collapsedText: buttonsCollapsedText,
                 }}
-                order={1}
-              >
-                {#if renderDeleteButton}
-                  <BlockComponent
-                    type="button"
-                    props={{
-                      text: deleteButtonLabel,
-                      onClick: onDelete,
-                      quiet: true,
-                      type: "secondary",
-                    }}
-                    order={0}
-                  />
-                {/if}
-                {#if renderSaveButton}
-                  <BlockComponent
-                    type="button"
-                    props={{
-                      text: saveButtonLabel,
-                      onClick: onSave,
-                      type: "cta",
-                    }}
-                    order={1}
-                  />
-                {/if}
-              </BlockComponent>
+                order={0}
+              />
             {/if}
           </BlockComponent>
         </BlockComponent>
@@ -227,24 +95,30 @@
       {#if description}
         <BlockComponent type="text" props={{ text: description }} order={1} />
       {/if}
-      {#key fields}
-        <BlockComponent type="container">
-          <div class="form-block fields" class:mobile={$context.device.mobile}>
-            {#each fields as field, idx}
-              {#if getComponentForField(field) && field.active}
-                <BlockComponent
-                  type={getComponentForField(field)}
-                  props={getPropsForField(field)}
-                  order={idx}
-                  interactive
-                  name={field?.field}
-                />
-              {/if}
-            {/each}
-          </div>
-        </BlockComponent>
-      {/key}
+      <BlockComponent type="container">
+        <div class="form-block fields" class:mobile={$context.device.mobile}>
+          {#each fields as field, idx}
+            <FormBlockComponent {field} {schema} order={idx} />
+          {/each}
+        </div>
+      </BlockComponent>
     </BlockComponent>
+    {#if buttonPosition === "bottom"}
+      <BlockComponent
+        type="buttongroup"
+        props={{
+          buttons,
+          collapsed: buttonsCollapsed,
+          collapsedText: buttonsCollapsedText,
+        }}
+        styles={{
+          normal: {
+            "margin-top": "24",
+          },
+        }}
+        order={1}
+      />
+    {/if}
   </BlockComponent>
 {:else}
   <Placeholder

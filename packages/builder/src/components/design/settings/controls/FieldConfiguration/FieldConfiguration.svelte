@@ -6,15 +6,15 @@
     getSchemaForDatasource,
     getBindableProperties,
     getComponentBindableProperties,
-  } from "builderStore/dataBinding"
-  import { currentAsset } from "builderStore"
+  } from "dataBinding"
+  import { selectedScreen, componentStore } from "stores/builder"
   import DraggableList from "../DraggableList/DraggableList.svelte"
   import { createEventDispatcher } from "svelte"
-  import { store, selectedScreen } from "builderStore"
   import FieldSetting from "./FieldSetting.svelte"
   import { convertOldFieldFormat, getComponentForField } from "./utils"
 
   export let componentInstance
+  export let bindings
   export let value
 
   const dispatch = createEventDispatcher()
@@ -29,7 +29,9 @@
 
   let selectAll = true
 
-  $: bindings = getBindableProperties($selectedScreen, componentInstance._id)
+  $: resolvedBindings =
+    bindings || getBindableProperties($selectedScreen, componentInstance._id)
+
   $: actionType = componentInstance.actionType
   let componentBindings = []
 
@@ -40,7 +42,10 @@
     )
   }
 
-  $: datasource = getDatasourceForProvider($currentAsset, componentInstance)
+  $: datasource =
+    componentInstance.dataSource ||
+    getDatasourceForProvider($selectedScreen, componentInstance)
+
   $: resourceId = datasource?.resourceId || datasource?.tableId
 
   $: if (!isEqual(value, cachedValue)) {
@@ -48,7 +53,7 @@
   }
 
   const updateState = value => {
-    schema = getSchema($currentAsset, datasource)
+    schema = getSchema($selectedScreen, datasource)
     options = Object.keys(schema || {})
     sanitisedValue = getValidColumns(convertOldFieldFormat(value), options)
     updateSanitsedFields(sanitisedValue)
@@ -118,7 +123,7 @@
     }
     instance._component = `@budibase/standard-components/${type}`
 
-    const pseudoComponentInstance = store.actions.components.createInstance(
+    const pseudoComponentInstance = componentStore.createInstance(
       instance._component,
       {
         _instanceName: instance.field,
@@ -157,7 +162,7 @@
 
 <div class="field-configuration">
   <div class="toggle-all">
-    <span />
+    <span>Fields</span>
     <Toggle
       on:change={() => {
         let update = fieldList.map(field => ({
@@ -180,13 +185,16 @@
       listType={FieldSetting}
       listTypeProps={{
         componentBindings,
-        bindings,
+        bindings: resolvedBindings,
       }}
     />
   {/if}
 </div>
 
 <style>
+  .field-configuration {
+    padding-top: 8px;
+  }
   .field-configuration :global(.spectrum-ActionButton) {
     width: 100%;
   }
@@ -205,6 +213,5 @@
   .toggle-all span {
     color: var(--spectrum-global-color-gray-700);
     font-size: 12px;
-    margin-left: calc(var(--spacing-s) - 1px);
   }
 </style>

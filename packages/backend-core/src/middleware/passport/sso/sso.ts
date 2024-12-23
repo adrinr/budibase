@@ -2,10 +2,8 @@ import { generateGlobalUserID } from "../../../db"
 import { authError } from "../utils"
 import * as users from "../../../users"
 import * as context from "../../../context"
-import fetch from "node-fetch"
 import {
   SaveSSOUserFunction,
-  SaveUserOpts,
   SSOAuthDetails,
   SSOUser,
   User,
@@ -14,17 +12,15 @@ import {
 // no-op function for user save
 // - this allows datasource auth and access token refresh to work correctly
 // - prefer no-op over an optional argument to ensure function is provided to login flows
-export const ssoSaveUserNoOp: SaveSSOUserFunction = (
-  user: SSOUser,
-  opts: SaveUserOpts
-) => Promise.resolve(user)
+export const ssoSaveUserNoOp: SaveSSOUserFunction = (user: SSOUser) =>
+  Promise.resolve(user)
 
 /**
  * Common authentication logic for third parties. e.g. OAuth, OIDC.
  */
 export async function authenticate(
   details: SSOAuthDetails,
-  requireLocalAccount: boolean = true,
+  requireLocalAccount = true,
   done: any,
   saveUserFn: SaveSSOUserFunction
 ) {
@@ -100,28 +96,13 @@ export async function authenticate(
   return done(null, ssoUser)
 }
 
-async function getProfilePictureUrl(user: User, details: SSOAuthDetails) {
-  const pictureUrl = details.profile?._json.picture
-  if (pictureUrl) {
-    const response = await fetch(pictureUrl)
-    if (response.status === 200) {
-      const type = response.headers.get("content-type") as string
-      if (type.startsWith("image/")) {
-        return pictureUrl
-      }
-    }
-  }
-}
-
 /**
  * @returns a user that has been sync'd with third party information
  */
 async function syncUser(user: User, details: SSOAuthDetails): Promise<SSOUser> {
   let firstName
   let lastName
-  let pictureUrl
   let oauth2
-  let thirdPartyProfile
 
   if (details.profile) {
     const profile = details.profile
@@ -136,12 +117,6 @@ async function syncUser(user: User, details: SSOAuthDetails): Promise<SSOUser> {
       if (name.familyName) {
         lastName = name.familyName
       }
-    }
-
-    pictureUrl = await getProfilePictureUrl(user, details)
-
-    thirdPartyProfile = {
-      ...profile._json,
     }
   }
 
@@ -158,8 +133,6 @@ async function syncUser(user: User, details: SSOAuthDetails): Promise<SSOUser> {
     providerType: details.providerType,
     firstName,
     lastName,
-    thirdPartyProfile,
-    pictureUrl,
     oauth2,
   }
 }

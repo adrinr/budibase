@@ -17,14 +17,17 @@ import {
   env as coreEnv,
   timers,
   redis,
+  cache,
+  features,
 } from "@budibase/backend-core"
+
 db.init()
-import Koa from "koa"
 import koaBody from "koa-body"
 import http from "http"
 import api from "./api"
 
 const koaSession = require("koa-session")
+
 import { userAgent } from "koa-useragent"
 
 import destroyable from "server-destroy"
@@ -40,9 +43,10 @@ if (coreEnv.ENABLE_SSO_MAINTENANCE_MODE) {
 // this will setup http and https proxies form env variables
 bootstrap()
 
-const app: Application = new Koa()
+const app: Application = new Application()
 
 app.keys = ["secret", "key"]
+app.proxy = true
 
 // set up top level koa middleware
 app.use(handleScimBody)
@@ -51,6 +55,10 @@ app.use(koaBody({ multipart: true }))
 app.use(koaSession(app))
 app.use(middleware.correlation)
 app.use(middleware.pino)
+app.use(middleware.ip)
+if (!coreEnv.DISABLE_CONTENT_SECURITY_POLICY) {
+  app.use(middleware.csp)
+}
 app.use(userAgent)
 
 // authentication
@@ -86,9 +94,16 @@ const shutdown = () => {
 }
 
 export default server.listen(parseInt(env.PORT || "4002"), async () => {
-  console.log(`Worker running on ${JSON.stringify(server.address())}`)
+  let startupLog = `Worker running on ${JSON.stringify(server.address())}`
+  if (env.BUDIBASE_ENVIRONMENT) {
+    startupLog = `${startupLog} - environment: "${env.BUDIBASE_ENVIRONMENT}"`
+  }
+  console.log(startupLog)
+
   await initPro()
   await redis.clients.init()
+  features.init()
+  cache.docWritethrough.init()
   // configure events to use the pro audit log write
   // can't integrate directly into backend-core due to cyclic issues
   await events.processors.init(proSdk.auditLogs.write)

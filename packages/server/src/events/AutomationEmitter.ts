@@ -1,19 +1,20 @@
 import { rowEmission, tableEmission } from "./utils"
 import mainEmitter from "./index"
 import env from "../environment"
-import { Table, Row } from "@budibase/types"
+import {
+  Table,
+  Row,
+  DocumentType,
+  App,
+  ContextEmitter,
+  EventType,
+  UserBindings,
+} from "@budibase/types"
+import { context } from "@budibase/backend-core"
 
-// max number of automations that can chain on top of each other
-// TODO: in future make this configurable at the automation level
-const MAX_AUTOMATION_CHAIN = env.SELF_HOSTED ? 5 : 0
+const MAX_AUTOMATIONS_ALLOWED = 5
 
-/**
- * Special emitter which takes the count of automation runs which have occurred and blocks an
- * automation from running if it has reached the maximum number of chained automations runs.
- * This essentially "fakes" the normal emitter to add some functionality in-between to stop automations
- * from getting stuck endlessly chaining.
- */
-class AutomationEmitter {
+class AutomationEmitter implements ContextEmitter {
   chainCount: number
   metadata: { automationChainCount: number }
 
@@ -24,7 +25,37 @@ class AutomationEmitter {
     }
   }
 
-  emitRow(eventName: string, appId: string, row: Row, table?: Table) {
+  async getMaxAutomationChain() {
+    const db = context.getAppDB()
+    const appMetadata = await db.get<App>(DocumentType.APP_METADATA)
+    let chainAutomations = appMetadata?.automations?.chainAutomations
+
+    if (chainAutomations === true) {
+      return MAX_AUTOMATIONS_ALLOWED
+    } else if (chainAutomations === undefined && env.SELF_HOSTED) {
+      return MAX_AUTOMATIONS_ALLOWED
+    } else {
+      return 0
+    }
+  }
+
+  async emitRow({
+    eventName,
+    appId,
+    row,
+    table,
+    oldRow,
+    user,
+  }: {
+    eventName: EventType.ROW_SAVE | EventType.ROW_DELETE | EventType.ROW_UPDATE
+    appId: string
+    row: Row
+    table?: Table
+    oldRow?: Row
+    user: UserBindings
+  }) {
+    let MAX_AUTOMATION_CHAIN = await this.getMaxAutomationChain()
+
     // don't emit even if we've reached max automation chain
     if (this.chainCount >= MAX_AUTOMATION_CHAIN) {
       return
@@ -35,13 +66,17 @@ class AutomationEmitter {
       appId,
       row,
       table,
+      oldRow,
       metadata: this.metadata,
+      user,
     })
   }
 
-  emitTable(eventName: string, appId: string, table?: Table) {
+  async emitTable(eventName: string, appId: string, table?: Table) {
+    let MAX_AUTOMATION_CHAIN = await this.getMaxAutomationChain()
+
     // don't emit even if we've reached max automation chain
-    if (this.chainCount > MAX_AUTOMATION_CHAIN) {
+    if (this.chainCount >= MAX_AUTOMATION_CHAIN) {
       return
     }
 

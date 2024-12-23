@@ -2,7 +2,6 @@ import {
   Integration,
   DatasourceFieldType,
   QueryType,
-  QueryJson,
   SqlQuery,
   Table,
   TableSchema,
@@ -12,21 +11,26 @@ import {
   SourceName,
   Schema,
   TableSourceType,
+  DatasourcePlusQueryResponse,
+  SqlQueryBinding,
+  SqlClient,
+  EnrichedQueryJson,
 } from "@budibase/types"
 import {
   getSqlQuery,
-  SqlClient,
   buildExternalTableId,
-  convertSqlType,
+  generateColumnDefinition,
   finaliseExternalTables,
   checkExternalTables,
+  HOST_ADDRESS,
 } from "./utils"
-import dayjs from "dayjs"
-import { NUMBER_REGEX } from "../utilities"
-import Sql from "./base/sql"
+import { isDate, NUMBER_REGEX } from "../utilities"
 import { MySQLColumn } from "./base/types"
 import { getReadableErrorMessage } from "./base/errorMapping"
+import { sql } from "@budibase/backend-core"
 import mysql from "mysql2/promise"
+
+const Sql = sql.Sql
 
 interface MySQLConfig extends mysql.ConnectionOptions {
   database: string
@@ -48,7 +52,7 @@ const SCHEMA: Integration = {
   datasource: {
     host: {
       type: DatasourceFieldType.STRING,
-      default: "localhost",
+      default: HOST_ADDRESS,
       required: true,
     },
     port: {
@@ -111,7 +115,7 @@ const defaultTypeCasting = function (field: any, next: any) {
   return next()
 }
 
-export function bindingTypeCoerce(bindings: any[]) {
+export function bindingTypeCoerce(bindings: SqlQueryBinding) {
   for (let i = 0; i < bindings.length; i++) {
     const binding = bindings[i]
     if (typeof binding !== "string") {
@@ -124,11 +128,7 @@ export function bindingTypeCoerce(bindings: any[]) {
     }
     // if not a number, see if it is a date - important to do in this order as any
     // integer will be considered a valid date
-    else if (
-      /^\d/.test(binding) &&
-      dayjs(binding).isValid() &&
-      !binding.includes(",")
-    ) {
+    else if (isDate(binding)) {
       let value: any
       value = new Date(binding)
       if (isNaN(value)) {
@@ -141,7 +141,7 @@ export function bindingTypeCoerce(bindings: any[]) {
 }
 
 class MySQLIntegration extends Sql implements DatasourcePlus {
-  private config: MySQLConfig
+  private readonly config: MySQLConfig
   private client?: mysql.Connection
 
   constructor(config: MySQLConfig) {
@@ -236,6 +236,16 @@ class MySQLIntegration extends Sql implements DatasourcePlus {
 
   async connect() {
     this.client = await mysql.createConnection(this.config)
+    const res = await this.internalQuery(
+      {
+        sql: "SELECT VERSION();",
+      },
+      { connect: false }
+    )
+    const version = res?.[0]?.["VERSION()"]
+    if (version?.toLowerCase().includes("mariadb")) {
+      this.setExtendedSqlClient(SqlClient.MARIADB)
+    }
   }
 
   async disconnect() {
@@ -260,15 +270,16 @@ class MySQLIntegration extends Sql implements DatasourcePlus {
       const bindings = opts?.disableCoercion
         ? baseBindings
         : bindingTypeCoerce(baseBindings)
+      this.log(query.sql, bindings)
       // Node MySQL is callback based, so we must wrap our call in a promise
       const response = await this.client!.query(query.sql, bindings)
       return response[0]
     } catch (err: any) {
       let readableMessage = getReadableErrorMessage(SourceName.MYSQL, err.errno)
       if (readableMessage) {
-        throw new Error(readableMessage)
+        throw new Error(readableMessage, { cause: err })
       } else {
-        throw new Error(err.message as string)
+        throw err
       }
     } finally {
       if (opts?.connect && this.client) {
@@ -305,16 +316,15 @@ class MySQLIntegration extends Sql implements DatasourcePlus {
             (column.Extra === "auto_increment" ||
               column.Extra.toLowerCase().includes("generated"))
           const required = column.Null !== "YES"
-          const constraints = {
-            presence: required && !isAuto && !hasDefault,
-          }
-          schema[columnName] = {
+          schema[columnName] = generateColumnDefinition({
             name: columnName,
             autocolumn: isAuto,
-            constraints,
-            ...convertSqlType(column.Type),
+            presence: required && !isAuto && !hasDefault,
             externalType: column.Type,
-          }
+            options: column.Type.startsWith("enum")
+              ? column.Type.substring(6, column.Type.length - 2).split("','")
+              : undefined,
+          })
         }
         if (!tables[tableName]) {
           tables[tableName] = {
@@ -378,12 +388,22 @@ class MySQLIntegration extends Sql implements DatasourcePlus {
     return results.length ? results : [{ deleted: true }]
   }
 
-  async query(json: QueryJson) {
+  async query(json: EnrichedQueryJson): Promise<DatasourcePlusQueryResponse> {
     await this.connect()
     try {
       const queryFn = (query: any) =>
         this.internalQuery(query, { connect: false, disableCoercion: true })
-      return await this.queryWithReturning(json, queryFn)
+      const processFn = (result: any) => {
+        if (Array.isArray(result)) {
+          return this.convertJsonStringColumns(
+            json.table,
+            result,
+            json.tableAliases
+          )
+        }
+        return result
+      }
+      return await this.queryWithReturning(json, queryFn, processFn)
     } finally {
       await this.disconnect()
     }
@@ -392,7 +412,7 @@ class MySQLIntegration extends Sql implements DatasourcePlus {
   async getExternalSchema() {
     try {
       const [databaseResult] = await this.internalQuery({
-        sql: `SHOW CREATE DATABASE ${this.config.database}`,
+        sql: `SHOW CREATE DATABASE IF NOT EXISTS \`${this.config.database}\``,
       })
       let dumpContent = [databaseResult["Create Database"]]
 
@@ -412,8 +432,7 @@ class MySQLIntegration extends Sql implements DatasourcePlus {
         dumpContent.push(createTableStatement)
       }
 
-      const schema = dumpContent.join("\n")
-      return schema
+      return dumpContent.join(";\n") + ";"
     } finally {
       this.disconnect()
     }

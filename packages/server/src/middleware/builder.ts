@@ -1,8 +1,4 @@
-import {
-  APP_DEV_PREFIX,
-  DocumentType,
-  getGlobalIDFromUserMetadataID,
-} from "../db/utils"
+import { APP_DEV_PREFIX, getGlobalIDFromUserMetadataID } from "../db/utils"
 import {
   doesUserHaveLock,
   updateLock,
@@ -10,7 +6,7 @@ import {
   setDebounce,
 } from "../utilities/redis"
 import { db as dbCore, cache } from "@budibase/backend-core"
-import { UserCtx, Database } from "@budibase/types"
+import { DocumentType, UserCtx, Database } from "@budibase/types"
 
 const DEBOUNCE_TIME_SEC = 30
 
@@ -54,7 +50,7 @@ async function updateAppUpdatedAt(ctx: UserCtx) {
       const metadata = await db.get<any>(DocumentType.APP_METADATA)
       metadata.updatedAt = new Date().toISOString()
 
-      metadata.updatedBy = getGlobalIDFromUserMetadataID(ctx.user?.userId!)
+      metadata.updatedBy = getGlobalIDFromUserMetadataID(ctx.user!.userId!)
 
       const response = await db.put(metadata)
       metadata._rev = response.rev
@@ -63,9 +59,7 @@ async function updateAppUpdatedAt(ctx: UserCtx) {
       await setDebounce(appId, DEBOUNCE_TIME_SEC)
     } catch (err: any) {
       // if a 409 occurs, then multiple clients connected at the same time - ignore
-      if (err?.status === 409) {
-        return
-      } else {
+      if (err && err.status !== 409) {
         throw err
       }
     }

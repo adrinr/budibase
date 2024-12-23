@@ -1,4 +1,6 @@
 import { Checkbox, Select, RadioGroup, Stepper, Input } from "@budibase/bbui"
+import { licensing } from "stores/portal"
+import { get } from "svelte/store"
 import DataSourceSelect from "./controls/DataSourceSelect/DataSourceSelect.svelte"
 import S3DataSourceSelect from "./controls/S3DataSourceSelect.svelte"
 import DataProviderSelect from "./controls/DataProviderSelect.svelte"
@@ -20,14 +22,19 @@ import ValidationEditor from "./controls/ValidationEditor/ValidationEditor.svelt
 import DrawerBindableInput from "components/common/bindings/DrawerBindableInput.svelte"
 import ColumnEditor from "./controls/ColumnEditor/ColumnEditor.svelte"
 import BasicColumnEditor from "./controls/ColumnEditor/BasicColumnEditor.svelte"
-import GridColumnEditor from "./controls/ColumnEditor/GridColumnEditor.svelte"
+import GridColumnEditor from "./controls/GridColumnConfiguration/GridColumnConfiguration.svelte"
 import BarButtonList from "./controls/BarButtonList.svelte"
 import FieldConfiguration from "./controls/FieldConfiguration/FieldConfiguration.svelte"
 import ButtonConfiguration from "./controls/ButtonConfiguration/ButtonConfiguration.svelte"
 import RelationshipFilterEditor from "./controls/RelationshipFilterEditor.svelte"
+import FormStepConfiguration from "./controls/FormStepConfiguration.svelte"
+import FormStepControls from "./controls/FormStepControls.svelte"
+import PaywalledSetting from "./controls/PaywalledSetting.svelte"
+import TableConditionEditor from "./controls/TableConditionEditor.svelte"
 
 const componentMap = {
   text: DrawerBindableInput,
+  plainText: Input,
   select: Select,
   radio: RadioGroup,
   dataSource: DataSourceSelect,
@@ -50,9 +57,12 @@ const componentMap = {
   url: URLSelect,
   fieldConfiguration: FieldConfiguration,
   buttonConfiguration: ButtonConfiguration,
+  stepConfiguration: FormStepConfiguration,
+  formStepControls: FormStepControls,
   columns: ColumnEditor,
   "columns/basic": BasicColumnEditor,
   "columns/grid": GridColumnEditor,
+  tableConditions: TableConditionEditor,
   "field/sortable": SortableFieldSelect,
   "field/string": FormFieldSelect,
   "field/number": FormFieldSelect,
@@ -62,12 +72,15 @@ const componentMap = {
   "field/longform": FormFieldSelect,
   "field/datetime": FormFieldSelect,
   "field/attachment": FormFieldSelect,
+  "field/attachment_single": FormFieldSelect,
   "field/s3": Input,
   "field/link": FormFieldSelect,
   "field/array": FormFieldSelect,
   "field/json": FormFieldSelect,
   "field/barcodeqr": FormFieldSelect,
+  "field/signature_single": FormFieldSelect,
   "field/bb_reference": FormFieldSelect,
+  "field/bb_reference_single": FormFieldSelect,
   // Some validation types are the same as others, so not all types are
   // explicitly listed here. e.g. options uses string validation
   "validation/string": ValidationEditor,
@@ -76,14 +89,21 @@ const componentMap = {
   "validation/boolean": ValidationEditor,
   "validation/datetime": ValidationEditor,
   "validation/attachment": ValidationEditor,
+  "validation/attachment_single": ValidationEditor,
+  "validation/signature_single": ValidationEditor,
   "validation/link": ValidationEditor,
   "validation/bb_reference": ValidationEditor,
 }
 
 export const getComponentForSetting = setting => {
-  const { type, showInBar, barStyle } = setting || {}
+  const { type, showInBar, barStyle, license } = setting || {}
   if (!type) {
     return null
+  }
+
+  // Check for paywalled settings
+  if (license && get(licensing).isFreePlan) {
+    return PaywalledSetting
   }
 
   // We can show a clone of the bar settings for certain select settings

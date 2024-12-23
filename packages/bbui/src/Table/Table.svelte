@@ -42,6 +42,9 @@
   export let customPlaceholder = false
   export let showHeaderBorder = true
   export let placeholderText = "No rows found"
+  export let snippets = []
+  export let defaultSortColumn = undefined
+  export let defaultSortOrder = "Ascending"
 
   const dispatch = createEventDispatcher()
 
@@ -161,6 +164,8 @@
   }
 
   const sortRows = (rows, sortColumn, sortOrder) => {
+    sortColumn = sortColumn ?? defaultSortColumn
+    sortOrder = sortOrder ?? defaultSortOrder
     if (!sortColumn || !sortOrder || disableSorting) {
       return rows
     }
@@ -258,7 +263,10 @@
     if (select) {
       // Add any rows which are not already in selected rows
       rows.forEach(row => {
-        if (selectedRows.findIndex(x => x._id === row._id) === -1) {
+        if (
+          row.__selectable !== false &&
+          selectedRows.findIndex(x => x._id === row._id) === -1
+        ) {
           selectedRows.push(row)
         }
       })
@@ -303,6 +311,8 @@
 </script>
 
 {#key fields?.length}
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
   <div
     class="wrapper"
     class:wrapper--quiet={quiet}
@@ -393,6 +403,9 @@
                   class:noBorderCheckbox={!showHeaderBorder}
                   class="spectrum-Table-cell spectrum-Table-cell--divider spectrum-Table-cell--edit"
                   on:click={e => {
+                    if (row.__selectable === false) {
+                      return
+                    }
                     toggleSelectRow(row)
                     e.stopPropagation()
                   }}
@@ -423,6 +436,7 @@
                   <CellRenderer
                     {customRenderers}
                     {row}
+                    {snippets}
                     schema={schema[field]}
                     value={deepGet(row, field)}
                     on:clickrelationship
@@ -468,6 +482,7 @@
     --table-border: 1px solid var(--spectrum-alias-border-color-mid);
     --cell-padding: var(--spectrum-global-dimension-size-250);
     overflow: auto;
+    display: contents;
   }
   .wrapper--quiet {
     --table-bg: var(--spectrum-alias-background-color-transparent);

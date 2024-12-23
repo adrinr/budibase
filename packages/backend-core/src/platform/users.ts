@@ -20,9 +20,14 @@ export async function lookupTenantId(userId: string) {
   return user.tenantId
 }
 
-async function getUserDoc(emailOrId: string): Promise<PlatformUser> {
+export async function getUserDoc(emailOrId: string): Promise<PlatformUser> {
   const db = getPlatformDB()
   return db.get(emailOrId)
+}
+
+export async function updateUserDoc(platformUser: PlatformUserById) {
+  const db = getPlatformDB()
+  await db.put(platformUser)
 }
 
 // CREATE
@@ -79,6 +84,17 @@ async function addUserDoc(emailOrId: string, newDocFn: () => PlatformUser) {
   }
 }
 
+export async function addSsoUser(
+  ssoId: string,
+  email: string,
+  userId: string,
+  tenantId: string
+) {
+  return addUserDoc(ssoId, () =>
+    newUserSsoIdDoc(ssoId, email, userId, tenantId)
+  )
+}
+
 export async function addUser(
   tenantId: string,
   userId: string,
@@ -91,9 +107,7 @@ export async function addUser(
   ]
 
   if (ssoId) {
-    promises.push(
-      addUserDoc(ssoId, () => newUserSsoIdDoc(ssoId, email, userId, tenantId))
-    )
+    promises.push(addSsoUser(ssoId, email, userId, tenantId))
   }
 
   await Promise.all(promises)
@@ -104,15 +118,12 @@ export async function addUser(
 export async function removeUser(user: User) {
   const db = getPlatformDB()
   const keys = [user._id!, user.email]
-  const userDocs = await db.allDocs({
+  const userDocs = await db.allDocs<User>({
     keys,
     include_docs: true,
   })
-  const toDelete = userDocs.rows.map((row: any) => {
-    return {
-      ...row.doc,
-      _deleted: true,
-    }
-  })
-  await db.bulkDocs(toDelete)
+  await db.bulkRemove(
+    userDocs.rows.map(row => row.doc!),
+    { silenceErrors: true }
+  )
 }

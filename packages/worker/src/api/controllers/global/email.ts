@@ -1,8 +1,15 @@
 import { sendEmail as sendEmailFn } from "../../../utilities/email"
 import { tenancy } from "@budibase/backend-core"
-import { BBContext, User } from "@budibase/types"
+import {
+  UserCtx,
+  User,
+  SendEmailRequest,
+  SendEmailResponse,
+} from "@budibase/types"
 
-export async function sendEmail(ctx: BBContext) {
+export async function sendEmail(
+  ctx: UserCtx<SendEmailRequest, SendEmailResponse>
+) {
   let {
     workspaceId,
     email,
@@ -15,6 +22,7 @@ export async function sendEmail(ctx: BBContext) {
     bcc,
     automation,
     invite,
+    attachments,
   } = ctx.request.body
   let user: any
   if (userId) {
@@ -31,6 +39,7 @@ export async function sendEmail(ctx: BBContext) {
     bcc,
     automation,
     invite,
+    attachments,
   })
   ctx.body = {
     ...response,

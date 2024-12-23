@@ -1,4 +1,5 @@
 import {
+  AIConfig,
   Config,
   ConfigType,
   GoogleConfig,
@@ -17,7 +18,6 @@ import { DocumentType, SEPARATOR } from "../constants"
 import { CacheKey, TTL, withCache } from "../cache"
 import * as context from "../context"
 import env from "../environment"
-import environment from "../environment"
 
 // UTILS
 
@@ -181,10 +181,10 @@ export async function getGoogleDatasourceConfig(): Promise<
 }
 
 export function getDefaultGoogleConfig(): GoogleInnerConfig | undefined {
-  if (environment.GOOGLE_CLIENT_ID && environment.GOOGLE_CLIENT_SECRET) {
+  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
     return {
-      clientID: environment.GOOGLE_CLIENT_ID!,
-      clientSecret: environment.GOOGLE_CLIENT_SECRET!,
+      clientID: env.GOOGLE_CLIENT_ID!,
+      clientSecret: env.GOOGLE_CLIENT_SECRET!,
       activated: true,
     }
   }
@@ -254,4 +254,10 @@ export async function getSMTPConfig(
 export async function getSCIMConfig(): Promise<SCIMInnerConfig | undefined> {
   const config = await getConfig<SCIMConfig>(ConfigType.SCIM)
   return config?.config
+}
+
+// AI
+
+export async function getAIConfig(): Promise<AIConfig | undefined> {
+  return getConfig<AIConfig>(ConfigType.AI)
 }

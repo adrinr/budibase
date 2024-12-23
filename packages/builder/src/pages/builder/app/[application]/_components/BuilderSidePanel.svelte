@@ -14,8 +14,15 @@
     Button,
     FancySelect,
   } from "@budibase/bbui"
-  import { store } from "builderStore"
-  import { groups, licensing, apps, users, auth, admin } from "stores/portal"
+  import { builderStore, appStore, roles, appPublished } from "stores/builder"
+  import {
+    groups,
+    licensing,
+    appsStore,
+    users,
+    auth,
+    admin,
+  } from "stores/portal"
   import {
     fetchData,
     Constants,
@@ -28,8 +35,8 @@
   import RoleSelect from "components/common/RoleSelect.svelte"
   import UpgradeModal from "components/common/users/UpgradeModal.svelte"
   import { emailValidator } from "helpers/validation"
-  import { roles } from "stores/backend"
   import { fly } from "svelte/transition"
+  import InfoDisplay from "../design/[screenId]/[componentId]/_components/Component/InfoDisplay.svelte"
 
   let query = null
   let loaded = false
@@ -55,7 +62,7 @@
 
   let inviteFailureResponse = ""
   $: validEmail = emailValidator(email) === true
-  $: prodAppId = apps.getProdAppID($store.appId)
+  $: prodAppId = appsStore.getProdAppID($appStore.appId)
   $: promptInvite = showInvite(
     filteredInvites,
     filteredUsers,
@@ -107,7 +114,7 @@
       return
     }
     if (!prodAppId) {
-      console.log("Application id required")
+      console.error("Application id required")
       return
     }
     await usersFetch.update({
@@ -123,10 +130,7 @@
     filteredUsers = $usersFetch.rows
       .filter(user => user.email !== $auth.user.email)
       .map(user => {
-        const isAdminOrGlobalBuilder = sdk.users.isAdminOrGlobalBuilder(
-          user,
-          prodAppId
-        )
+        const isAdminOrGlobalBuilder = sdk.users.isAdminOrGlobalBuilder(user)
         const isAppBuilder = user.builder?.apps?.includes(prodAppId)
         let role
         if (isAdminOrGlobalBuilder) {
@@ -182,7 +186,7 @@
   const debouncedUpdateFetch = Utils.debounce(searchUsers, 250)
   $: debouncedUpdateFetch(
     query,
-    $store.builderSidePanel,
+    $builderStore.builderSidePanel,
     loaded,
     filterByAppAccess
   )
@@ -200,7 +204,7 @@
         [prodAppId]: role,
       },
     })
-    await searchUsers(query, $store.builderSidePanel, loaded)
+    await searchUsers(query, $builderStore.builderSidePanel, loaded)
   }
 
   const onUpdateUser = async (user, role) => {
@@ -364,17 +368,22 @@
     const payload = [
       {
         email: newUserEmail,
-        builder: { global: creationRoleType === Constants.BudibaseRoles.Admin },
-        admin: { global: creationRoleType === Constants.BudibaseRoles.Admin },
+        userInfo: {
+          builder: {
+            global: creationRoleType === Constants.BudibaseRoles.Admin,
+            creator: creationRoleType === Constants.BudibaseRoles.Creator,
+          },
+          admin: { global: creationRoleType === Constants.BudibaseRoles.Admin },
+        },
       },
     ]
 
     const notCreatingAdmin = creationRoleType !== Constants.BudibaseRoles.Admin
     const isCreator = creationAccessType === Constants.Roles.CREATOR
     if (notCreatingAdmin && isCreator) {
-      payload[0].builder.apps = [prodAppId]
+      payload[0].userInfo.builder.apps = [prodAppId]
     } else if (notCreatingAdmin && !isCreator) {
-      payload[0].apps = { [prodAppId]: creationAccessType }
+      payload[0].userInfo.apps = { [prodAppId]: creationAccessType }
     }
 
     let userInviteResponse
@@ -389,6 +398,10 @@
   }
 
   const openInviteFlow = () => {
+    // prevent email from getting overwritten if changes are made
+    if (!email) {
+      email = query
+    }
     $licensing.userLimitReached
       ? userLimitReachedModal.show()
       : (invitingFlow = true)
@@ -471,10 +484,6 @@
     await users.removeAppBuilder(userId, prodAppId)
   }
 
-  const addGroupAppBuilder = async groupId => {
-    await groups.actions.addGroupAppBuilder(groupId, prodAppId)
-  }
-
   const removeGroupAppBuilder = async groupId => {
     await groups.actions.removeGroupAppBuilder(groupId, prodAppId)
   }
@@ -486,7 +495,7 @@
     loaded = true
   }
 
-  $: initSidePanel($store.builderSidePanel)
+  $: initSidePanel($builderStore.builderSidePanel)
 
   function handleKeyDown(evt) {
     if (evt.key === "Enter" && validEmail && !inviting) {
@@ -495,14 +504,12 @@
   }
 
   const getInviteRoleValue = invite => {
-    if (invite.info?.admin?.global && invite.info?.builder?.global) {
-      return Constants.Roles.ADMIN
-    }
-
-    if (invite.info?.builder?.apps?.includes(prodAppId)) {
+    if (
+      (invite.info?.admin?.global && invite.info?.builder?.global) ||
+      invite.info?.builder?.apps?.includes(prodAppId)
+    ) {
       return Constants.Roles.CREATOR
     }
-
     return invite.info.apps?.[prodAppId]
   }
 
@@ -512,7 +519,7 @@
       return `This user has been given ${role?.name} access from the ${user.group} group`
     }
     if (user.isAdminOrGlobalBuilder) {
-      return "This user's role grants admin access to all apps"
+      return "Account admins can edit all apps"
     }
     return null
   }
@@ -523,19 +530,28 @@
     }
     return user.role
   }
+
+  const checkAppAccess = e => {
+    // Ensure we don't get into an invalid combo of tenant role and app access
+    if (
+      e.detail === Constants.BudibaseRoles.AppUser &&
+      creationAccessType === Constants.Roles.CREATOR
+    ) {
+      creationAccessType = Constants.Roles.BASIC
+    } else if (e.detail === Constants.BudibaseRoles.Admin) {
+      creationAccessType = Constants.Roles.CREATOR
+    }
+  }
 </script>
 
 <svelte:window on:keydown={handleKeyDown} />
 
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 <div
   transition:fly={{ x: 400, duration: 260 }}
   id="builder-side-panel-container"
-  use:clickOutside={() => {
-    store.update(state => {
-      state.builderSidePanel = false
-      return state
-    })
-  }}
+  use:clickOutside={builderStore.hideBuilderSidePanel}
 >
   <div class="builder-side-panel-header">
     <div
@@ -558,10 +574,7 @@
         name="RailRightClose"
         hoverable
         on:click={() => {
-          store.update(state => {
-            state.builderSidePanel = false
-            return state
-          })
+          builderStore.hideBuilderSidePanel()
         }}
       />
     </div>
@@ -598,6 +611,17 @@
     </div>
 
     <div class="body">
+      {#if !$appPublished}
+        <div class="alert">
+          <InfoDisplay
+            icon="AlertCircleFilled"
+            warning
+            title="App unpublished"
+            body="Users won't be able to access your app until you've published it"
+          />
+        </div>
+      {/if}
+
       {#if promptInvite && !userOnboardResponse}
         <Layout gap="S" paddingX="XL">
           <div class="invite-header">
@@ -613,7 +637,7 @@
       {/if}
 
       {#if !promptInvite}
-        <Layout gap="L" noPadding>
+        <Layout gap="M" noPadding>
           {#if filteredInvites?.length}
             <Layout noPadding gap="XS">
               <div class="auth-entity-header">
@@ -650,8 +674,9 @@
                       autoWidth
                       align="right"
                       allowedRoles={user.isAdminOrGlobalBuilder
-                        ? [Constants.Roles.ADMIN]
+                        ? [Constants.Roles.CREATOR]
                         : null}
+                      labelPrefix="Can use as"
                     />
                   </div>
                 </div>
@@ -695,19 +720,16 @@
                       allowRemove={group.role}
                       allowPublic={false}
                       quiet={true}
-                      allowCreator={true}
+                      allowCreator={group.role === Constants.Roles.CREATOR}
                       on:change={e => {
-                        if (e.detail === Constants.Roles.CREATOR) {
-                          addGroupAppBuilder(group._id)
-                        } else {
-                          onUpdateGroup(group, e.detail)
-                        }
+                        onUpdateGroup(group, e.detail)
                       }}
                       on:remove={() => {
                         onUpdateGroup(group)
                       }}
                       autoWidth
                       align="right"
+                      labelPrefix="Can use as"
                     />
                   </div>
                 </div>
@@ -753,6 +775,7 @@
                       allowedRoles={user.isAdminOrGlobalBuilder
                         ? [Constants.Roles.CREATOR]
                         : null}
+                      labelPrefix="Can use as"
                     />
                   </div>
                 </div>
@@ -781,7 +804,7 @@
       {/if}
     </div>
   {:else}
-    <Divider />
+    <Divider noMargin />
     <div class="body">
       <Layout gap="L" noPadding>
         <div class="user-invite-form">
@@ -804,31 +827,34 @@
             <FancySelect
               bind:value={creationRoleType}
               options={sdk.users.isAdmin($auth.user)
-                ? Constants.BudibaseRoleOptionsNew
-                : Constants.BudibaseRoleOptionsNew.filter(
+                ? Constants.BudibaseRoleOptions
+                : Constants.BudibaseRoleOptions.filter(
                     option => option.value !== Constants.BudibaseRoles.Admin
                   )}
               label="Role"
+              on:change={checkAppAccess}
             />
-            {#if creationRoleType !== Constants.BudibaseRoles.Admin}
+            <span class="role-wrap">
               <RoleSelect
                 placeholder={false}
                 bind:value={creationAccessType}
                 allowPublic={false}
-                allowCreator={true}
+                allowCreator={creationRoleType !==
+                  Constants.BudibaseRoles.AppUser}
                 quiet={true}
                 autoWidth
                 align="right"
                 fancySelect
+                allowedRoles={creationRoleType === Constants.BudibaseRoles.Admin
+                  ? [Constants.Roles.CREATOR]
+                  : null}
+                footer={getRoleFooter({
+                  isAdminOrGlobalBuilder:
+                    creationRoleType === Constants.BudibaseRoles.Admin,
+                })}
               />
-            {/if}
+            </span>
           </FancyForm>
-          {#if creationRoleType === Constants.BudibaseRoles.Admin}
-            <div class="admin-info">
-              <Icon name="Info" />
-              Admins will get full access to all apps and settings
-            </div>
-          {/if}
           <span class="add-user">
             <Button
               newStyles
@@ -847,6 +873,13 @@
 </div>
 
 <style>
+  .role-wrap :global(.fancy-field:not(:last-of-type)) {
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
   .search :global(input) {
     padding-left: 0px;
   }
@@ -860,16 +893,6 @@
     padding-top: var(--spacing-xl);
     width: 100%;
     display: grid;
-  }
-
-  .admin-info {
-    margin-top: var(--spacing-xl);
-    padding: var(--spacing-l) var(--spacing-l) var(--spacing-l) var(--spacing-l);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xl);
-    height: 30px;
-    background-color: var(--background-alt);
   }
 
   .underlined {
@@ -889,7 +912,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-s);
-    width: 400px;
   }
 
   .auth-entity-meta {
@@ -918,7 +940,7 @@
   .auth-entity,
   .auth-entity-header {
     display: grid;
-    grid-template-columns: 1fr 110px;
+    grid-template-columns: 1fr 220px;
     align-items: center;
     gap: var(--spacing-xl);
   }
@@ -949,7 +971,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     position: absolute;
-    width: 400px;
+    width: 480px;
     right: 0;
     height: 100%;
     box-shadow: 0 0 40px 10px rgba(0, 0, 0, 0.1);
@@ -1025,5 +1047,8 @@
     flex-direction: column;
     gap: var(--spacing-xl);
     padding: var(--spacing-xl) 0;
+  }
+  .alert {
+    padding: 0 var(--spacing-xl);
   }
 </style>

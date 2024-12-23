@@ -10,14 +10,19 @@
   import { API } from "api"
   import { goto } from "@roxi/routify"
   import {
-    store,
-    sortedScreens,
     automationStore,
-    themeStore,
-  } from "builderStore"
-  import { datasources, queries, tables, views } from "stores/backend"
+    previewStore,
+    builderStore,
+    sortedScreens,
+    appStore,
+    datasources,
+    queries,
+    tables,
+    views,
+  } from "stores/builder"
+  import { themeStore } from "stores/portal"
   import { getContext } from "svelte"
-  import { Constants } from "@budibase/frontend-core"
+  import { ThemeOptions } from "@budibase/shared-core"
 
   const modalContext = getContext(Context.Modal)
   const commands = [
@@ -26,8 +31,7 @@
       name: "Invite users and manage app access",
       description: "",
       icon: "User",
-      action: () =>
-        store.update(state => ({ ...state, builderSidePanel: true })),
+      action: () => builderStore.showBuilderSidePanel(),
     },
     {
       type: "Navigate",
@@ -69,13 +73,13 @@
       name: "App",
       description: "",
       icon: "Play",
-      action: () => store.update(state => ({ ...state, showPreview: true })),
+      action: () => previewStore.showPreview(true),
     },
     {
       type: "Preview",
       name: "Published App",
       icon: "Play",
-      action: () => window.open(`/app${$store.url}`),
+      action: () => window.open(`/app${$appStore.url}`),
     },
     {
       type: "Support",
@@ -137,13 +141,13 @@
       icon: "ShareAndroid",
       action: () => $goto(`./automation/${automation._id}`),
     })) ?? []),
-    ...Constants.Themes.map(theme => ({
+    ...ThemeOptions.map(themeMeta => ({
       type: "Change Builder Theme",
-      name: theme.name,
+      name: themeMeta.name,
       icon: "ColorPalette",
       action: () =>
         themeStore.update(state => {
-          state.theme = theme.class
+          state.theme = themeMeta.id
           return state
         }),
     })),
@@ -216,7 +220,7 @@
 
   async function deployApp() {
     try {
-      await API.publishAppChanges($store.appId)
+      await API.publishAppChanges($appStore.appId)
       notifications.success("App published successfully")
     } catch (error) {
       notifications.error("Error publishing app")
@@ -233,6 +237,8 @@
 </script>
 
 <svelte:window on:keydown={onKeyDown} />
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <ModalContent
   size="L"
   showCancelButton={false}

@@ -1,12 +1,12 @@
 <script>
   import { syncURLToState } from "helpers/urlStateSync"
-  import { tables } from "stores/backend"
+  import { tables, builderStore } from "stores/builder"
   import * as routify from "@roxi/routify"
   import { onDestroy } from "svelte"
-  import { store } from "builderStore"
+  import ViewNavBar from "./_components/ViewNavBar.svelte"
 
   $: tableId = $tables.selectedTableId
-  $: store.actions.websocket.selectResource(tableId)
+  $: builderStore.selectResource(tableId)
 
   const stopSyncing = syncURLToState({
     urlParam: "tableId",
@@ -21,4 +21,17 @@
   onDestroy(stopSyncing)
 </script>
 
-<slot />
+<div class="wrapper">
+  <ViewNavBar />
+  <slot />
+</div>
+
+<style>
+  .wrapper {
+    flex: 1 1 auto;
+    margin: -28px -40px -40px -40px;
+    display: flex;
+    flex-direction: column;
+    background: var(--spectrum-global-color-gray-50);
+  }
+</style>

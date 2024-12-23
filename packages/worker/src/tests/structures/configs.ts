@@ -5,6 +5,7 @@ import {
   SMTPConfig,
   GoogleConfig,
   OIDCConfig,
+  AIConfig,
 } from "@budibase/types"
 
 export function oidc(conf?: any): OIDCConfig {
@@ -45,7 +46,7 @@ export function smtp(conf?: any): SMTPConfig {
     config: {
       port: 12345,
       host: "smtptesthost.com",
-      from: "testfrom@test.com",
+      from: "testfrom@example.com",
       subject: "Hello!",
       secure: false,
       ...conf,
@@ -59,11 +60,11 @@ export function smtpEthereal(): SMTPConfig {
     config: {
       port: 587,
       host: "smtp.ethereal.email",
-      from: "testfrom@test.com",
+      from: "testfrom@example.com",
       secure: false,
       auth: {
-        user: "wyatt.zulauf29@ethereal.email",
-        pass: "tEwDtHBWWxusVWAPfa",
+        user: "mortimer.leuschke@ethereal.email",
+        pass: "5hSjsPbzRv7gEUsfzx",
       },
       connectionTimeout: 1000, // must be less than the jest default of 5000
     },
@@ -78,6 +79,23 @@ export function settings(conf?: any): SettingsConfig {
       logoUrl: "",
       company: "Budibase",
       ...conf,
+    },
+  }
+}
+
+export function ai(): AIConfig {
+  return {
+    type: ConfigType.AI,
+    config: {
+      ai: {
+        provider: "OpenAI",
+        isDefault: false,
+        name: "Test",
+        active: true,
+        defaultModel: "gpt4",
+        apiKey: "myapikey",
+        baseUrl: "https://api.example.com",
+      },
     },
   }
 }

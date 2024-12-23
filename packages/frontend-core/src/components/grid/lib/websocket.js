@@ -29,7 +29,7 @@ export const createGridWebsocket = context => {
     connectToDatasource(get(datasource))
   })
   socket.on("connect_error", err => {
-    console.log("Failed to connect to grid websocket:", err.message)
+    console.error("Failed to connect to grid websocket:", err.message)
   })
 
   // User events
@@ -57,6 +57,15 @@ export const createGridWebsocket = context => {
       // Only update definition if one exists. If the datasource was deleted
       // then we don't want to know - let the builder navigate away
       if (newDatasource) {
+        definition.set(newDatasource)
+      }
+    }
+  )
+  socket.on(
+    GridSocketEvent.DatasourceChange,
+    ({ datasource: newDatasource }) => {
+      // Listen builder renames, as these aren't handled otherwise
+      if (newDatasource?.name !== get(definition).name) {
         definition.set(newDatasource)
       }
     }

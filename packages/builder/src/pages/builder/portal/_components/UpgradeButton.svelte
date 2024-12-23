@@ -2,15 +2,14 @@
   import { Button } from "@budibase/bbui"
   import { goto } from "@roxi/routify"
   import { auth, admin, licensing } from "stores/portal"
-  import { isEnabled, TENANT_FEATURE_FLAGS } from "helpers/featureFlags"
   import { sdk } from "@budibase/shared-core"
 </script>
 
-{#if isEnabled(TENANT_FEATURE_FLAGS.LICENSING) && !$licensing.isEnterprisePlan}
+{#if !$licensing.isEnterprisePlan && !$licensing.isEnterpriseTrial}
   {#if $admin.cloud && $auth?.user?.accountPortalAccess}
     <Button
       cta
-      size="S"
+      size="M"
       on:click
       on:click={() => {
         window.open($admin.accountPortalUrl + "/portal/upgrade", "_blank")
@@ -21,7 +20,7 @@
   {:else if !$admin.cloud && sdk.users.isAdmin($auth.user)}
     <Button
       cta
-      size="S"
+      size="M"
       on:click={() => $goto("/builder/portal/account/upgrade")}
       on:click
     >

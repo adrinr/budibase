@@ -1,7 +1,8 @@
 <script>
   import { getContext } from "svelte"
   import { Pagination, ProgressCircle } from "@budibase/bbui"
-  import { fetchData, LuceneUtils } from "@budibase/frontend-core"
+  import { fetchData, QueryUtils } from "@budibase/frontend-core"
+  import { LogicalOperator, EmptyFilterOption } from "@budibase/types"
 
   export let dataSource
   export let filter
@@ -9,17 +10,19 @@
   export let sortOrder
   export let limit
   export let paginate
+  export let autoRefresh
 
   const { styleable, Provider, ActionTypes, API } = getContext("sdk")
   const component = getContext("component")
 
+  let interval
+  let queryExtensions = {}
+
+  $: defaultQuery = QueryUtils.buildQuery(filter)
+
   // We need to manage our lucene query manually as we want to allow components
   // to extend it
-  let queryExtensions = {}
-  $: defaultQuery = LuceneUtils.buildLuceneQuery(filter)
   $: query = extendQuery(defaultQuery, queryExtensions)
-
-  // Fetch data and refresh when needed
   $: fetch = createFetch(dataSource)
   $: fetch.update({
     query,
@@ -28,11 +31,8 @@
     limit,
     paginate,
   })
-
-  // Sanitize schema to remove hidden fields
   $: schema = sanitizeSchema($fetch.schema)
-
-  // Build our action context
+  $: setUpAutoRefresh(autoRefresh)
   $: actions = [
     {
       type: ActionTypes.RefreshDatasource,
@@ -63,15 +63,13 @@
       },
     },
   ]
-
-  // Build our data context
   $: dataContext = {
     rows: $fetch.rows,
     info: $fetch.info,
     datasource: dataSource || {},
     schema,
     rowsLength: $fetch.rows.length,
-
+    pageNumber: $fetch.pageNumber + 1,
     // Undocumented properties. These aren't supposed to be used in builder
     // bindings, but are used internally by other components
     id: $component?.id,
@@ -128,17 +126,30 @@
   }
 
   const extendQuery = (defaultQuery, extensions) => {
-    const extensionValues = Object.values(extensions || {})
-    let extendedQuery = { ...defaultQuery }
-    extensionValues.forEach(extension => {
-      Object.entries(extension || {}).forEach(([operator, fields]) => {
-        extendedQuery[operator] = {
-          ...extendedQuery[operator],
-          ...fields,
-        }
-      })
-    })
-    return extendedQuery
+    if (!Object.keys(extensions).length) {
+      return defaultQuery
+    }
+    const extended = {
+      [LogicalOperator.AND]: {
+        conditions: [
+          ...(defaultQuery ? [defaultQuery] : []),
+          ...Object.values(extensions || {}),
+        ],
+      },
+      onEmptyFilter: EmptyFilterOption.RETURN_NONE,
+    }
+
+    // If there are no conditions applied at all, clear the request.
+    return extended[LogicalOperator.AND]?.conditions?.length > 0
+      ? extended
+      : null
+  }
+
+  const setUpAutoRefresh = autoRefresh => {
+    clearInterval(interval)
+    if (autoRefresh) {
+      interval = setInterval(fetch.refresh, Math.max(10000, autoRefresh * 1000))
+    }
   }
 </script>
 

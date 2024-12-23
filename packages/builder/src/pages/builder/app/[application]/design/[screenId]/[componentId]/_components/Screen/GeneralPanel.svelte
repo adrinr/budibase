@@ -1,7 +1,7 @@
 <script>
   import { get } from "svelte/store"
-  import { Helpers } from "@budibase/bbui"
   import {
+    Helpers,
     Input,
     Checkbox,
     Banner,
@@ -10,18 +10,97 @@
   } from "@budibase/bbui"
   import PropertyControl from "components/design/settings/controls/PropertyControl.svelte"
   import RoleSelect from "components/design/settings/controls/RoleSelect.svelte"
-  import { selectedScreen, store } from "builderStore"
-  import sanitizeUrl from "builderStore/store/screenTemplates/utils/sanitizeUrl"
+  import { selectedScreen, screenStore } from "stores/builder"
+  import sanitizeUrl from "helpers/sanitizeUrl"
   import ButtonActionEditor from "components/design/settings/controls/ButtonActionEditor/ButtonActionEditor.svelte"
-  import { getBindableProperties } from "builderStore/dataBinding"
+  import { getBindableProperties } from "dataBinding"
+  import BarButtonList from "components/design/settings/controls/BarButtonList.svelte"
 
   $: bindings = getBindableProperties($selectedScreen, null)
+  $: screenSettings = getScreenSettings($selectedScreen)
 
   let errors = {}
 
+  const getScreenSettings = screen => {
+    let settings = [
+      {
+        key: "routing.homeScreen",
+        control: Checkbox,
+        props: {
+          text: "Set as home screen",
+        },
+      },
+      {
+        key: "routing.route",
+        label: "Route",
+        control: Input,
+        parser: val => {
+          if (!val.startsWith("/")) {
+            val = "/" + val
+          }
+          return sanitizeUrl(val)
+        },
+        validate: route => {
+          const existingRoute = screen.routing.route
+          if (route !== existingRoute && routeTaken(route)) {
+            return "That URL is already in use for this role"
+          }
+          return null
+        },
+      },
+      {
+        key: "routing.roleId",
+        label: "Access",
+        control: RoleSelect,
+        validate: role => {
+          const existingRole = screen.routing.roleId
+          if (role !== existingRole && roleTaken(role)) {
+            return "That role is already in use for this URL"
+          }
+          return null
+        },
+      },
+      {
+        key: "onLoad",
+        label: "On screen load",
+        control: ButtonActionEditor,
+      },
+      {
+        key: "width",
+        label: "Width",
+        control: Select,
+        props: {
+          options: ["Extra small", "Small", "Medium", "Large", "Max"],
+          placeholder: "Default",
+          disabled: !!screen.layoutId,
+        },
+      },
+      {
+        key: "props.layout",
+        label: "Layout",
+        defaultValue: "flex",
+        control: BarButtonList,
+        props: {
+          options: [
+            {
+              barIcon: "ModernGridView",
+              value: "flex",
+            },
+            {
+              barIcon: "ViewGrid",
+              value: "grid",
+            },
+          ],
+        },
+      },
+    ]
+
+    return settings
+  }
+
   const routeTaken = url => {
     const roleId = get(selectedScreen).routing.roleId || "BASIC"
-    return get(store).screens.some(
+    return get(screenStore).screens.some(
       screen =>
         screen.routing.route.toLowerCase() === url.toLowerCase() &&
         screen.routing.roleId === roleId
@@ -30,7 +109,7 @@
 
   const roleTaken = roleId => {
     const url = get(selectedScreen).routing.route
-    return get(store).screens.some(
+    return get(screenStore).screens.some(
       screen =>
         screen.routing.route.toLowerCase() === url.toLowerCase() &&
         screen.routing.roleId === roleId
@@ -64,70 +143,15 @@
 
     // Update screen setting
     try {
-      await store.actions.screens.updateSetting(get(selectedScreen), key, value)
+      await screenStore.updateSetting(get(selectedScreen), key, value)
     } catch (error) {
-      console.log(error)
+      console.error(error)
       notifications.error("Error saving screen settings")
     }
   }
 
-  $: screenSettings = [
-    {
-      key: "routing.homeScreen",
-      control: Checkbox,
-      props: {
-        text: "Set as home screen",
-      },
-    },
-    {
-      key: "routing.route",
-      label: "Route",
-      control: Input,
-      parser: val => {
-        if (!val.startsWith("/")) {
-          val = "/" + val
-        }
-        return sanitizeUrl(val)
-      },
-      validate: route => {
-        const existingRoute = get(selectedScreen).routing.route
-        if (route !== existingRoute && routeTaken(route)) {
-          return "That URL is already in use for this role"
-        }
-        return null
-      },
-    },
-    {
-      key: "routing.roleId",
-      label: "Access",
-      control: RoleSelect,
-      validate: role => {
-        const existingRole = get(selectedScreen).routing.roleId
-        if (role !== existingRole && roleTaken(role)) {
-          return "That role is already in use for this URL"
-        }
-        return null
-      },
-    },
-    {
-      key: "onLoad",
-      label: "On screen load",
-      control: ButtonActionEditor,
-    },
-    {
-      key: "width",
-      label: "Width",
-      control: Select,
-      props: {
-        options: ["Extra small", "Small", "Medium", "Large", "Max"],
-        placeholder: "Default",
-        disabled: !!$selectedScreen.layoutId,
-      },
-    },
-  ]
-
   const removeCustomLayout = async () => {
-    return store.actions.screens.removeCustomLayout(get(selectedScreen))
+    return screenStore.removeCustomLayout(get(selectedScreen))
   }
 </script>
 
@@ -149,6 +173,7 @@
     value={Helpers.deepGet($selectedScreen, setting.key)}
     onChange={val => setScreenSetting(setting, val)}
     props={{ ...setting.props, error: errors[setting.key] }}
+    defaultValue={setting.defaultValue}
     {bindings}
   />
 {/each}

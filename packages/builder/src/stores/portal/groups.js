@@ -35,7 +35,10 @@ export function createGroupsStore() {
     get: getGroup,
 
     save: async group => {
-      const response = await API.saveGroup(group)
+      const { ...dataToSave } = group
+      delete dataToSave.scimInfo
+      delete dataToSave.userGroups
+      const response = await API.saveGroup(dataToSave)
       group._id = response._id
       group._rev = response._rev
       updateStore(group)
@@ -43,10 +46,7 @@ export function createGroupsStore() {
     },
 
     delete: async group => {
-      await API.deleteGroup({
-        id: group._id,
-        rev: group._rev,
-      })
+      await API.deleteGroup(group._id, group._rev)
       store.update(state => {
         state = state.filter(state => state._id !== group._id)
         return state
@@ -86,11 +86,11 @@ export function createGroupsStore() {
     },
 
     addGroupAppBuilder: async (groupId, appId) => {
-      return await API.addGroupAppBuilder({ groupId, appId })
+      return await API.addGroupAppBuilder(groupId, appId)
     },
 
     removeGroupAppBuilder: async (groupId, appId) => {
-      return await API.removeGroupAppBuilder({ groupId, appId })
+      return await API.removeGroupAppBuilder(groupId, appId)
     },
   }
 

@@ -1,7 +1,6 @@
 const setup = require("./utilities")
 const { events } = require("@budibase/backend-core")
 
-
 describe("/dev", () => {
   let request = setup.getRequest()
   let config = setup.getConfig()
@@ -20,7 +19,7 @@ describe("/dev", () => {
         .set(config.defaultHeaders())
         .expect("Content-Type", /json/)
         .expect(200)
-      expect(events.app.reverted).toBeCalledTimes(1)
+      expect(events.app.reverted).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -32,9 +31,11 @@ describe("/dev", () => {
         .expect("Content-Type", /json/)
         .expect(200)
 
-      expect(res.body.version).toBe('0.0.0+jest')
-      expect(events.installation.versionChecked).toBeCalledTimes(1)
-      expect(events.installation.versionChecked).toBeCalledWith('0.0.0+jest')
+      expect(res.body.version).toBe("0.0.0+jest")
+      expect(events.installation.versionChecked).toHaveBeenCalledTimes(1)
+      expect(events.installation.versionChecked).toHaveBeenCalledWith(
+        "0.0.0+jest"
+      )
     })
   })
 })

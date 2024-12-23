@@ -1,15 +1,20 @@
-import newid from "./newid"
-import { db as dbCore } from "@budibase/backend-core"
+import { context, db as dbCore, docIds, utils } from "@budibase/backend-core"
 import {
+  DatabaseQueryOpts,
+  Datasource,
   DocumentType,
   FieldSchema,
-  RelationshipFieldMetadata,
-  VirtualDocumentType,
+  FieldType,
   INTERNAL_TABLE_SOURCE_ID,
-  DatabaseQueryOpts,
+  RelationshipFieldMetadata,
+  SourceName,
+  VirtualDocumentType,
+  LinkDocument,
 } from "@budibase/types"
-import { FieldTypes } from "../constants"
+
 export { DocumentType, VirtualDocumentType } from "@budibase/types"
+
+const newid = utils.newid
 
 type Optional = string | null
 
@@ -19,11 +24,11 @@ export const enum AppStatus {
   DEPLOYED = "published",
 }
 
-export const BudibaseInternalDB = {
+export const BudibaseInternalDB: Datasource = {
   _id: INTERNAL_TABLE_SOURCE_ID,
   type: dbCore.BUDIBASE_DATASOURCE_TYPE,
   name: "Budibase DB",
-  source: "BUDIBASE",
+  source: SourceName.BUDIBASE,
   config: {},
 }
 
@@ -65,7 +70,7 @@ export function getTableParams(tableId?: Optional, otherProps = {}) {
  * @returns The new table ID which the table doc can be stored under.
  */
 export function generateTableID() {
-  return `${DocumentType.TABLE}${SEPARATOR}${newid()}`
+  return dbCore.generateTableID()
 }
 
 /**
@@ -126,8 +131,22 @@ export function generateLinkID(
 /**
  * Gets parameters for retrieving link docs, this is a utility function for the getDocParams function.
  */
-export function getLinkParams(otherProps: any = {}) {
+function getLinkParams(otherProps: Partial<DatabaseQueryOpts> = {}) {
   return getDocParams(DocumentType.LINK, null, otherProps)
+}
+
+/**
+ * Gets all the link docs document from the current app db.
+ */
+export async function allLinkDocs() {
+  const db = context.getAppDB()
+
+  const response = await db.allDocs<LinkDocument>(
+    getLinkParams({
+      include_docs: true,
+    })
+  )
+  return response.rows.map(row => row.doc!)
 }
 
 /**
@@ -283,6 +302,12 @@ export function generatePluginID(name: string) {
   return `${DocumentType.PLUGIN}${SEPARATOR}${name}`
 }
 
+export function generateJunctionTableID(tableId1: string, tableId2: string) {
+  const first = tableId1 > tableId2 ? tableId1 : tableId2
+  const second = tableId1 > tableId2 ? tableId2 : tableId1
+  return `${first}${SEPARATOR}${second}`
+}
+
 /**
  * Generates a new view ID.
  * @returns The new view ID which the view doc can be stored under.
@@ -293,12 +318,8 @@ export function generateViewID(tableId: string) {
   }${SEPARATOR}${tableId}${SEPARATOR}${newid()}`
 }
 
-export function isViewID(viewId: string) {
-  return viewId?.split(SEPARATOR)[0] === VirtualDocumentType.VIEW
-}
-
 export function extractViewInfoFromID(viewId: string) {
-  if (!isViewID(viewId)) {
+  if (!docIds.isViewId(viewId)) {
     throw new Error("Unable to extract table ID, is not a view ID")
   }
   const split = viewId.split(SEPARATOR)
@@ -314,5 +335,13 @@ export function extractViewInfoFromID(viewId: string) {
 export function isRelationshipColumn(
   column: FieldSchema
 ): column is RelationshipFieldMetadata {
-  return column.type === FieldTypes.LINK
+  return column.type === FieldType.LINK
+}
+
+/**
+ * Generates a new row actions ID.
+ * @returns The new row actions ID which the row actions doc can be stored under.
+ */
+export function generateRowActionsID(tableId: string) {
+  return `${DocumentType.ROW_ACTIONS}${SEPARATOR}${tableId}`
 }

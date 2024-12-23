@@ -5,6 +5,8 @@ import { paramResource, paramSubResource } from "../../middleware/resourceId"
 import { permissions } from "@budibase/backend-core"
 import { internalSearchValidator } from "./utils/validators"
 import trimViewRowInfo from "../../middleware/trimViewRowInfo"
+import { validateBody } from "../../middleware/zod-validator"
+import { searchRowRequestValidator } from "@budibase/types"
 
 const { PermissionType, PermissionLevel } = permissions
 
@@ -32,6 +34,7 @@ router
   .post(
     "/api/:sourceId/search",
     internalSearchValidator(),
+    validateBody(searchRowRequestValidator),
     paramResource("sourceId"),
     authorized(PermissionType.TABLE, PermissionLevel.READ),
     rowController.search
@@ -77,9 +80,17 @@ router
     authorized(PermissionType.TABLE, PermissionLevel.WRITE),
     rowController.exportRows
   )
+  .get(
+    "/api/:sourceId/rows/:rowId/attachment/:columnName",
+    paramSubResource("sourceId", "rowId"),
+    authorized(PermissionType.TABLE, PermissionLevel.READ),
+    rowController.downloadAttachment
+  )
 
 router.post(
   "/api/v2/views/:viewId/search",
+  internalSearchValidator(),
+  validateBody(searchRowRequestValidator),
   authorizedResource(PermissionType.VIEW, PermissionLevel.READ, "viewId"),
   rowController.views.searchView
 )
